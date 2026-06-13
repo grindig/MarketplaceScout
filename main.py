@@ -64,8 +64,14 @@ def scan_once(config: dict) -> list[dict]:
     all_matches: list[dict] = []
     cycle_ids: set[str] = set()  # the same listing may appear in several search URLs
     for url in config["search_urls"]:
-        html = fetch_html(url)
-        all_listings = parse_listings(html)
+        # Isolate per-URL failures: one timed-out or 5xx'd search URL must not
+        # abort the whole cycle and silently drop every other URL's listings.
+        try:
+            html = fetch_html(url)
+            all_listings = parse_listings(html)
+        except Exception as exc:
+            print(f"{BOLD}{YELLOW}[WARN]{RESET} Scan: URL fehlgeschlagen ({url}): {exc}")
+            continue
         for item in filter_listings(all_listings, config["keywords"], config["max_price"]):
             if item["id"] not in cycle_ids:
                 cycle_ids.add(item["id"])
@@ -203,6 +209,13 @@ async def scan_loop(client: discord.Client, config: dict, channel_cfg: dict, see
                 print(f"{BOLD}{GREEN}[#{channel.name} SCAN #{scan_count}]{RESET} {len(new_listings)} neue Treffer!")
                 sent_any = False
                 for listing in new_listings:
+                    # All channels share one seen_ids set. new_listings was
+                    # computed before the awaits below, so another channel's
+                    # loop may have sent the same listing in the meantime —
+                    # re-check here so a listing shared across channels' URLs
+                    # isn't posted twice.
+                    if listing["id"] in seen_ids:
+                        continue
                     price_str = f"{listing['price']:.2f} EUR" if listing["price"] is not None else "N/A"
                     print(f"  {YELLOW}->{RESET} {listing['title']} | {price_str} | {listing['location']}")
 
