@@ -25,6 +25,23 @@ def test_find_gpu_model_longest_match():
     assert find_gpu_model("RTX 3080 Ti kaputt", models) == "RTX 3080 Ti"
 
 
+def test_find_gpu_model_spaceless_title():
+    # Willhaben titles routinely drop the space ("RTX3080"); these still pass the
+    # keyword filter, so the price must be recorded too.
+    assert find_gpu_model("RTX3080 defekt", GPU_MODELS) == "RTX 3080"
+    assert find_gpu_model("GTX1080 kein Bild", GPU_MODELS) == "GTX 1080"
+
+
+def test_find_gpu_model_spaceless_longest_match():
+    models = GPU_MODELS + ["RTX 3080 Ti"]
+    assert find_gpu_model("Verkaufe RTX3080Ti, Bastler", models) == "RTX 3080 Ti"
+
+
+def test_find_gpu_model_no_false_match_on_price_number():
+    # A bare number in the title (e.g. a price) must not match a model.
+    assert find_gpu_model("Grafikkarte um 3080 Euro", ["RTX 3080"]) is None
+
+
 def test_find_gpu_model_no_match():
     assert find_gpu_model("Mainboard defekt", GPU_MODELS) is None
 
