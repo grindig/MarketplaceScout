@@ -2,9 +2,12 @@
 
 import json
 import os
+import re
 from typing import Optional
 
 PRICES_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "json", "prices.json")
+
+_WHITESPACE = re.compile(r"\s+")
 
 # Rolling window: only the most recent entries count toward avg/min/max,
 # so months-old market prices don't skew the stats.
@@ -12,9 +15,17 @@ MAX_HISTORY = 100
 
 
 def find_gpu_model(title: str, gpu_models: list[str]) -> Optional[str]:
-    """Return the longest GPU model keyword found in title (case-insensitive), or None."""
-    title_lower = title.lower()
-    matches = [m for m in gpu_models if m.lower() in title_lower]
+    """Return the longest GPU model keyword found in title (case-insensitive), or None.
+
+    Whitespace is collapsed on both sides before matching so spaceless titles
+    ("RTX3080", "GTX1070Ti") — very common on Willhaben — still match the spaced
+    model names in keywords.json. The keyword filter already treats these as hits
+    (so they get posted), so without this the price would silently go unrecorded.
+    Every model carries a letter prefix (RTX/GTX), so dropping spaces can't make a
+    model accidentally match a bare price number.
+    """
+    title_norm = _WHITESPACE.sub("", title.lower())
+    matches = [m for m in gpu_models if _WHITESPACE.sub("", m.lower()) in title_norm]
     return max(matches, key=len) if matches else None
 
 
