@@ -1,0 +1,28 @@
+{
+  "general": [
+    "defekt", "kaputt", "broken", "defective", "bastler",
+    "bastelware", "reparatur", "ersatzteile", "geht nicht",
+    "startet nicht", "kein bild", "no display", "artifact",
+    "artefakte", "überhitzt", "fan defekt", "lüfter kaputt",
+    "RTX", "GTX", "nvidia",
+    "1060", "1070", "1080",
+    "2060", "2070", "2080",
+    "3060", "3070", "3080", "3090",
+    "4060", "4070", "4080", "4090",
+    "5060", "5070", "5080", "5090",
+    "RX", "radeon",
+    "RX 580", "RX 6600", "RX 6700", "RX 6800", "RX 6900",
+    "RX 7600", "RX 7700", "RX 7800", "RX 7900",
+    "Quadro", "Tesla",
+    "MSI", "ASUS", "Gigabyte", "EVGA", "Zotac", "Sapphire",
+    "PowerColor", "XFX",
+    "grafikkarte", "GPU", "Grafik"
+  ],
+  "gpu_models": [
+    "GTX 1060", "GTX 1070", "GTX 1070 Ti", "GTX 1080", "GTX 1080 Ti",
+    "RTX 2060", "RTX 2060 SUPER", "RTX 2070", "RTX 2070 SUPER", "RTX 2080", "RTX 2080 SUPER", "RTX 2080 Ti",
+    "RTX 3060", "RTX 3060 Ti", "RTX 3070", "RTX 3070 Ti", "RTX 3080", "RTX 3080 Ti", "RTX 3090", "RTX 3090 Ti",
+    "RTX 4060", "RTX 4060 Ti", "RTX 4070", "RTX 4070 SUPER", "RTX 4070 Ti", "RTX 4070 Ti SUPER", "RTX 4080", "RTX 4080 SUPER", "RTX 4090",
+    "RTX 5060", "RTX 5060 Ti", "RTX 5070", "RTX 5070 Ti", "RTX 5080", "RTX 5090"
+  ]
+}

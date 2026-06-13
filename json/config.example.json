@@ -1,0 +1,26 @@
+{
+  "scan_interval_seconds": 60,
+  "backfill_days": 0,
+  "auto_archive_interval_minutes": 30,
+  "stats_channel_id": "000000000000000000",
+  "channels": [
+    {
+      "channel_id": "000000000000000000",
+      "max_price": null,
+      "track_prices": false,
+      "show_price_stats": false,
+      "search_urls": [
+        "https://www.willhaben.at/iad/kaufen-und-verkaufen/marktplatz/pc-komponenten-5878/a/zustand-defekt-24?rows=30&isNavigation=true"
+      ]
+    },
+    {
+      "channel_id": "000000000000000000",
+      "max_price": 500,
+      "track_prices": true,
+      "show_price_stats": true,
+      "search_urls": [
+        "https://www.willhaben.at/iad/kaufen-und-verkaufen/marktplatz/pc-komponenten-5878/a/zustand-gebraucht-23?rows=30&isNavigation=true"
+      ]
+    }
+  ]
+}

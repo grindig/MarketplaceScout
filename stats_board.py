@@ -1,0 +1,141 @@
+"""Live stats board: posts and hourly-edits one embed per GPU generation."""
+
+import asyncio
+import json
+import os
+import re
+from datetime import datetime
+
+import discord
+
+from colors import CYAN, DARK_GRAY, LIGHT_GRAY, RESET
+from price_tracker import _load, PRICES_PATH
+
+STATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "json", "stats_state.json")
+_TAG = f"{DARK_GRAY}[{CYAN}STATS{DARK_GRAY}]{RESET}"
+
+_GENERATIONS = ["10xx", "20xx", "30xx", "40xx", "50xx"]
+_EMBED_COLOR = 0x76B900  # NVIDIA green
+# GeForce model numbers (1050..5090): generation digit, 0, tier 5-9, 0.
+# Digit-boundary lookarounds instead of \b so "RTX3060" still matches while
+# "Quadro P4000" and "RX 580" stay out.
+_MODEL_NUMBER = re.compile(r"(?<!\d)([1-5])0[5-9]0(?!\d)")
+
+
+def _load_state() -> dict:
+    if not os.path.exists(STATE_PATH):
+        return {}
+    try:
+        with open(STATE_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
+def _save_state(channel_id: str, message_id: int) -> None:
+    tmp = STATE_PATH + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump({"channel_id": channel_id, "message_id": message_id}, f)
+    os.replace(tmp, STATE_PATH)
+
+
+def _fmt(price: float) -> str:
+    if price == int(price):
+        return f"{int(price)} €"
+    return f"{price:.2f} €".replace(".", ",")
+
+
+def _generation(model: str) -> str:
+    match = _MODEL_NUMBER.search(model)
+    return f"{match.group(1)}0xx" if match else "other"
+
+
+def build_gen_embed(gen: str, prices: dict, show_footer: bool = False) -> discord.Embed:
+    """Build a Discord embed for one GPU generation. No title, just fields."""
+    embed = discord.Embed(color=_EMBED_COLOR)
+
+    models = sorted(m for m in prices if _generation(m) == gen)
+    for model in models:
+        history = prices[model]
+        if not history:
+            continue
+        if len(history) == 1:
+            value = f"{_fmt(history[0])} · 1 Inserat"
+        else:
+            avg = sum(history) / len(history)
+            value = (
+                f"Ø {_fmt(avg)} · {len(history)} Inserate\n"
+                f"Min {_fmt(min(history))} · Max {_fmt(max(history))}"
+            )
+        embed.add_field(name=model, value=value, inline=True)
+
+    if not models:
+        embed.add_field(name="Keine Daten", value="Noch keine Daten vorhanden", inline=True)
+
+    if show_footer:
+        now = datetime.now()
+        embed.set_footer(text=f"Zuletzt aktualisiert: {now.strftime('%d.%m.%Y · %H:%M')} Uhr")
+
+    return embed
+
+
+async def stats_init(client: discord.Client, channel_id: str | None) -> discord.Message | None:
+    """Fetch channel, find or post the stats message. Returns the message or None on failure."""
+    if not channel_id:
+        return None
+
+    print(f"{_TAG} {LIGHT_GRAY}Preisübersicht wird initialisiert...{RESET}")
+
+    try:
+        channel = await client.fetch_channel(int(channel_id))
+    except (ValueError, discord.NotFound, discord.Forbidden, discord.HTTPException) as e:
+        print(f"{_TAG} {LIGHT_GRAY}Kanal {channel_id} nicht erreichbar: {e}{RESET}")
+        return None
+
+    state = _load_state()
+    message = None
+    if state.get("channel_id") == channel_id and state.get("message_id"):
+        try:
+            message = await channel.fetch_message(state["message_id"])
+            print(f"{_TAG} {LIGHT_GRAY}Bestehende Nachricht gefunden ({message.id}), wird aktualisiert.{RESET}")
+        except Exception as e:
+            print(f"{_TAG} {LIGHT_GRAY}Bestehende Nachricht nicht abrufbar ({e}), neue wird gepostet.{RESET}")
+
+    prices = _load(PRICES_PATH)
+    embeds = [
+        build_gen_embed(gen, prices, show_footer=(i == len(_GENERATIONS) - 1))
+        for i, gen in enumerate(_GENERATIONS)
+    ]
+
+    if message is None:
+        message = await channel.send(embeds=embeds)
+        _save_state(channel_id, message.id)
+        print(f"{_TAG} {LIGHT_GRAY}Neue Nachricht gepostet ({message.id}).{RESET}")
+    else:
+        await message.edit(embeds=embeds)
+
+    return message
+
+
+async def stats_loop(client: discord.Client, channel_id: str, message: discord.Message) -> None:
+    """Hourly update loop. Edits the existing message, reposts if deleted.
+
+    Transient errors (rate limits, network, 5xx) are logged and retried next
+    hour instead of killing the task.
+    """
+    while True:
+        await asyncio.sleep(3600)
+        try:
+            prices = _load(PRICES_PATH)
+            embeds = [
+                build_gen_embed(gen, prices, show_footer=(i == len(_GENERATIONS) - 1))
+                for i, gen in enumerate(_GENERATIONS)
+            ]
+            try:
+                await message.edit(embeds=embeds)
+            except discord.NotFound:
+                channel = await client.fetch_channel(int(channel_id))
+                message = await channel.send(embeds=embeds)
+                _save_state(channel_id, message.id)
+        except Exception as e:
+            print(f"{_TAG} {LIGHT_GRAY}Update fehlgeschlagen, nächster Versuch in 1h: {e}{RESET}")

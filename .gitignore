@@ -1,0 +1,14 @@
+# Secrets & local runtime state — never commit these
+.env
+json/config.json
+json/seen.json
+json/prices.json
+json/stats_state.json
+json/*.tmp
+
+# Caches / scratch
+__pycache__/
+*.pyc
+.pytest_cache/
+.claude/
+temp/
