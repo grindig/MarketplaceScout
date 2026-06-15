@@ -62,3 +62,66 @@ def test_archive_to_thread_deletes_embedless_without_posting():
     assert archived == 1
     assert thread.sent == []
     assert msgs[0].deleted
+
+
+class TestCommandsGerman:
+    """Drive all /clear and /archive user-facing strings through German.
+
+    Existing tests call the helper functions directly and only assert runtime
+    behavior, not what Discord sees at sync time. So we have to build a real
+    command tree and read the registered description/parameter strings off it
+    - that is the only way to catch a missing t() wrap on the @tree.command
+    decorator itself.
+    """
+
+    def setup_method(self):
+        from i18n import set_language
+        set_language("de")
+
+    def teardown_method(self):
+        from i18n import set_language
+        set_language("en")
+
+    @staticmethod
+    def _build_tree():
+        """Register the commands against a fresh mock client and return the tree."""
+        from unittest.mock import MagicMock, PropertyMock
+        import discord
+        from commands import register_commands
+
+        client = MagicMock()
+        client.user.id = 1
+        client.http = MagicMock()
+        # CommandTree.__init__ checks self._state._command_tree is None.
+        type(client)._connection = PropertyMock(return_value=MagicMock())
+        type(client)._connection._command_tree = None
+
+        tree = discord.app_commands.CommandTree(client)
+        register_commands(client, tree)
+        return tree
+
+    def test_clear_description_german(self):
+        tree = self._build_tree()
+        cmd = tree.get_command("clear")
+        assert "Löscht" in cmd.description
+
+    def test_clear_param_descriptions_german(self):
+        tree = self._build_tree()
+        cmd = tree.get_command("clear")
+        param_descs = {p.name: p.description for p in cmd.parameters}
+        assert param_descs["days"] == "Tage (rückwärts ab jetzt)"
+        assert param_descs["hours"] == "Stunden (rückwärts ab jetzt)"
+        assert param_descs["minutes"] == "Minuten (rückwärts ab jetzt)"
+
+    def test_clear_reply_need_value_german(self):
+        from i18n import t
+        assert t("command.clear.reply.need_value") == "Bitte mindestens einen Wert > 0 angeben."
+
+    def test_archive_description_german(self):
+        tree = self._build_tree()
+        cmd = tree.get_command("archive")
+        assert "Archiviert" in cmd.description
+
+    def test_archive_reply_no_messages_german(self):
+        from i18n import t
+        assert t("command.archive.reply.no_messages") == "Keine Bot-Nachrichten im Zeitfenster gefunden."
