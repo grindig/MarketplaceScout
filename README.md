@@ -178,7 +178,7 @@ fully translatable. Set `language` in `json/config.json` to one of the available
 codes (currently `en` and `de`) and restart the bot.
 
 Adding a new language is two steps:
-1. Copy `json/locales/en.json` to `json/locales/<code>.json` and translate the values.
+1. Copy `locales/en.json` to `locales/<code>.json` and translate the values.
 2. Add the code to `AVAILABLE_LANGUAGES` in `i18n.py`.
 
 ---
