@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 import discord
 
 from colors import RESET, BOLD, YELLOW, MAGENTA
+from i18n import t
 
 X_EMOJI = "\U0000274c"  # ❌
 
@@ -41,7 +42,7 @@ async def archive_message(client: discord.Client, payload: discord.RawReactionAc
     try:
         message = await channel.fetch_message(payload.message_id)
     except Exception as exc:
-        print(f"{BOLD}{YELLOW}[WARN]{RESET} Archive: could not fetch message {payload.message_id}: {exc}")
+        print(f"{BOLD}{YELLOW}[{t('warn.banner_prefix')}]{RESET} " + t("archive.fetch_failed", id=payload.message_id, exc=exc))
         return
 
     if message.author.id != client.user.id:
@@ -50,21 +51,21 @@ async def archive_message(client: discord.Client, payload: discord.RawReactionAc
     try:
         archive_thread = await find_or_create_archive_thread(channel)
     except Exception as exc:
-        print(f"{BOLD}{YELLOW}[WARN]{RESET} Archive: could not find/create archive thread: {exc}")
+        print(f"{BOLD}{YELLOW}[{t('warn.banner_prefix')}]{RESET} " + t("archive.thread_failed", exc=exc))
         return
 
     if message.embeds:  # an empty embed list would raise on send
         try:
             await archive_thread.send(embeds=message.embeds)
         except Exception as exc:
-            print(f"{BOLD}{YELLOW}[WARN]{RESET} Archive: could not post to archive thread: {exc}")
+            print(f"{BOLD}{YELLOW}[{t('warn.banner_prefix')}]{RESET} " + t("archive.send_failed", exc=exc))
             return
 
     try:
         await message.delete()
-        print(f"{MAGENTA}[ARCHIVE]{RESET} Message {message.id} archived.")
+        print(f"{MAGENTA}[ARCHIVE]{RESET} " + t("archive.message_archived", id=message.id))
     except Exception as exc:
-        print(f"{BOLD}{YELLOW}[WARN]{RESET} Archive: could not delete original message {message.id}: {exc}")
+        print(f"{BOLD}{YELLOW}[{t('warn.banner_prefix')}]{RESET} " + t("archive.delete_failed", id=message.id, exc=exc))
 
 
 async def auto_archive_loop(
@@ -89,7 +90,7 @@ async def auto_archive_loop(
                         try:
                             archive_thread = await find_or_create_archive_thread(channel)
                         except Exception as exc:
-                            print(f"{BOLD}{YELLOW}[WARN]{RESET} AutoArchive: archive thread failed for #{channel.name}: {exc}")
+                            print(f"{BOLD}{YELLOW}[{t('warn.banner_prefix')}]{RESET} " + t("auto_archive.thread_failed", channel=channel.name, exc=exc))
                             break
                     # Embed-less messages are deleted without forwarding —
                     # sending an empty embed list raises and would retry forever.
@@ -97,14 +98,14 @@ async def auto_archive_loop(
                         try:
                             await archive_thread.send(embeds=msg.embeds)
                         except Exception as exc:
-                            print(f"{BOLD}{YELLOW}[WARN]{RESET} AutoArchive: could not post msg {msg.id}: {exc}")
+                            print(f"{BOLD}{YELLOW}[{t('warn.banner_prefix')}]{RESET} " + t("auto_archive.send_failed", id=msg.id, exc=exc))
                             continue
                     try:
                         await msg.delete()
-                        print(f"{MAGENTA}[AUTO-ARCHIVE]{RESET} #{channel.name} msg {msg.id} archived (>24h).")
+                        print(f"{MAGENTA}[AUTO-ARCHIVE]{RESET} " + t("auto_archive.message_archived", channel=channel.name, id=msg.id))
                     except Exception as exc:
-                        print(f"{BOLD}{YELLOW}[WARN]{RESET} AutoArchive: could not delete msg {msg.id}: {exc}")
+                        print(f"{BOLD}{YELLOW}[{t('warn.banner_prefix')}]{RESET} " + t("auto_archive.delete_failed", id=msg.id, exc=exc))
             except Exception as exc:
-                print(f"{BOLD}{YELLOW}[WARN]{RESET} AutoArchive: history fetch failed for #{channel.name}: {exc}")
+                print(f"{BOLD}{YELLOW}[{t('warn.banner_prefix')}]{RESET} " + t("auto_archive.history_failed", channel=channel.name, exc=exc))
                 continue
         await asyncio.sleep(interval_minutes * 60)
