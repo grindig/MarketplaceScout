@@ -158,3 +158,51 @@ def test_send_and_mark_keeps_unseen_on_failure(monkeypatch):
     assert ok is False
     assert seen == set()
     assert calls == [("42", False)]
+
+def test_load_config_defaults_to_english(tmp_path, monkeypatch):
+    """No 'language' key in config -> English is the active language."""
+    from i18n import get_language
+    (tmp_path / "config.json").write_text(json.dumps({"channels": []}), encoding="utf-8")
+    (tmp_path / "keywords.json").write_text(
+        json.dumps({"general": [], "gpu_models": []}), encoding="utf-8"
+    )
+    monkeypatch.setattr(main, "CONFIG_PATH", str(tmp_path / "config.json"))
+    monkeypatch.setattr(main, "KEYWORDS_PATH", str(tmp_path / "keywords.json"))
+
+    main.load_config()
+    assert get_language() == "en"
+
+
+def test_load_config_applies_language(tmp_path, monkeypatch):
+    """'language: de' in config -> set_language('de') is called."""
+    from i18n import get_language
+    (tmp_path / "config.json").write_text(
+        json.dumps({"language": "de", "channels": []}), encoding="utf-8"
+    )
+    (tmp_path / "keywords.json").write_text(
+        json.dumps({"general": [], "gpu_models": []}), encoding="utf-8"
+    )
+    monkeypatch.setattr(main, "CONFIG_PATH", str(tmp_path / "config.json"))
+    monkeypatch.setattr(main, "KEYWORDS_PATH", str(tmp_path / "keywords.json"))
+
+    main.load_config()
+    assert get_language() == "de"
+    # Reset to en so other tests aren't polluted
+    from i18n import set_language
+    set_language("en")
+
+
+def test_load_config_rejects_unknown_language(tmp_path, monkeypatch, capsys):
+    """Unknown 'language' value exits with a friendly error."""
+    (tmp_path / "config.json").write_text(
+        json.dumps({"language": "klingon", "channels": []}), encoding="utf-8"
+    )
+    (tmp_path / "keywords.json").write_text(
+        json.dumps({"general": [], "gpu_models": []}), encoding="utf-8"
+    )
+    monkeypatch.setattr(main, "CONFIG_PATH", str(tmp_path / "config.json"))
+    monkeypatch.setattr(main, "KEYWORDS_PATH", str(tmp_path / "keywords.json"))
+
+    with pytest.raises(SystemExit):
+        main.load_config()
+    assert "klingon" in capsys.readouterr().out
