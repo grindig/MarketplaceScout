@@ -115,3 +115,17 @@ def test_send_notification_returns_true_when_only_reactions_fail():
     """The listing was delivered — a failed reaction must not count as a lost notification."""
     result = asyncio.run(send_notification(FakeChannel(react_fails=True), make_listing()))
     assert result is True
+
+
+def test_build_embed_thumbnail_set_when_image_url_present():
+    listing = make_listing(image_url="https://cache.willhaben.at/mmo/x.jpg")
+    embed = build_embed(listing)
+    assert embed.thumbnail is not None
+    assert embed.thumbnail.url == "https://cache.willhaben.at/mmo/x.jpg"
+
+
+def test_build_embed_no_thumbnail_when_image_url_empty():
+    listing = make_listing(image_url="")
+    embed = build_embed(listing)
+    # discord.py leaves thumbnail.url = None when never set
+    assert embed.thumbnail is None or embed.thumbnail.url is None

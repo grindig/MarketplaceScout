@@ -24,6 +24,9 @@ def build_embed(listing: dict) -> discord.Embed:
         color=0x19AFFF,
         timestamp=listing.get("published") or datetime.now(timezone.utc),
     )
+    image_url = listing.get("image_url")
+    if image_url:
+        embed.set_thumbnail(url=image_url)
     embed.add_field(name="Preis", value=price_value, inline=True)
     embed.add_field(name="Standort", value=location, inline=True)
     embed.add_field(name="PayLivery", value="✅" if listing.get("paylivery") else "❌", inline=True)
