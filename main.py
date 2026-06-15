@@ -237,7 +237,7 @@ async def scan_loop(client: discord.Client, config: dict, channel_cfg: dict, see
                         model = find_gpu_model(listing["title"], config["gpu_models"])
                         if model and channel_cfg.get("show_price_stats"):
                             stats = get_stats(model)  # historical avg only; this price is recorded after the send
-                            if stats:
+                            if stats and stats["avg"] > 0:
                                 pct = ((listing["price"] - stats["avg"]) / stats["avg"]) * 100
                                 listing["price_stats"] = {
                                     "avg": stats["avg"],
