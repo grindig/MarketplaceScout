@@ -7,6 +7,7 @@ from discord import app_commands
 
 from archiver import find_or_create_archive_thread
 from colors import RESET, BOLD, YELLOW, MAGENTA, CYAN
+from i18n import t
 
 
 async def _bot_messages_in_window(
@@ -59,12 +60,15 @@ def _window_label(days: int, hours: int, minutes: int) -> str:
 
 
 def register_commands(client: discord.Client, tree: app_commands.CommandTree) -> None:
-    @tree.command(name="clear", description="Löscht Bot-Notifications im angegebenen Zeitfenster in diesem Channel.")
+    @tree.command(
+        name=t("command.clear.name"),
+        description=t("command.clear.description"),
+    )
     @app_commands.default_permissions(manage_messages=True)
     @app_commands.describe(
-        days="Tage (rückwärts ab jetzt)",
-        hours="Stunden (rückwärts ab jetzt)",
-        minutes="Minuten (rückwärts ab jetzt)",
+        days=t("command.clear.param.days"),
+        hours=t("command.clear.param.hours"),
+        minutes=t("command.clear.param.minutes"),
     )
     async def clear_cmd(
         interaction: discord.Interaction,
@@ -77,10 +81,10 @@ def register_commands(client: discord.Client, tree: app_commands.CommandTree) ->
         days, hours, minutes = max(0, days), max(0, hours), max(0, minutes)
         window = _build_window(days, hours, minutes)
         if window is None:
-            await interaction.response.send_message("Bitte mindestens einen Wert > 0 angeben.", ephemeral=True)
+            await interaction.response.send_message(t("command.clear.reply.need_value"), ephemeral=True)
             return
         if not isinstance(interaction.channel, discord.TextChannel):
-            await interaction.response.send_message("Nur in Text-Channels verfügbar.", ephemeral=True)
+            await interaction.response.send_message(t("command.clear.reply.text_only"), ephemeral=True)
             return
 
         await interaction.response.defer(ephemeral=True, thinking=True)
@@ -94,19 +98,25 @@ def register_commands(client: discord.Client, tree: app_commands.CommandTree) ->
                 bulk=True,
             )
         except Exception as exc:
-            await interaction.followup.send(f"Fehler: {exc}", ephemeral=True)
+            await interaction.followup.send(t("command.clear.reply.error", error=exc), ephemeral=True)
             return
 
         label = _window_label(days, hours, minutes)
-        print(f"{CYAN}[CLEAR]{RESET} #{interaction.channel.name}: {len(deleted)} Nachrichten gelöscht ({label}).")
-        await interaction.followup.send(f"{len(deleted)} Nachrichten gelöscht.", ephemeral=True)
+        print(
+            f"{CYAN}[{t('command.clear.banner_prefix')}]{RESET} "
+            f"{t('command.clear.reply.deleted_log', channel=interaction.channel.name, n=len(deleted), label=label)}"
+        )
+        await interaction.followup.send(t("command.clear.reply.deleted", n=len(deleted)), ephemeral=True)
 
-    @tree.command(name="archive", description="Archiviert Bot-Notifications im angegebenen Zeitfenster in diesem Channel.")
+    @tree.command(
+        name=t("command.archive.name"),
+        description=t("command.archive.description"),
+    )
     @app_commands.default_permissions(manage_messages=True)
     @app_commands.describe(
-        days="Tage (rückwärts ab jetzt)",
-        hours="Stunden (rückwärts ab jetzt)",
-        minutes="Minuten (rückwärts ab jetzt)",
+        days=t("command.clear.param.days"),
+        hours=t("command.clear.param.hours"),
+        minutes=t("command.clear.param.minutes"),
     )
     async def archive_cmd(
         interaction: discord.Interaction,
@@ -117,11 +127,11 @@ def register_commands(client: discord.Client, tree: app_commands.CommandTree) ->
         days, hours, minutes = max(0, days), max(0, hours), max(0, minutes)
         window = _build_window(days, hours, minutes)
         if window is None:
-            await interaction.response.send_message("Bitte mindestens einen Wert > 0 angeben.", ephemeral=True)
+            await interaction.response.send_message(t("command.clear.reply.need_value"), ephemeral=True)
             return
         channel = interaction.channel
         if not isinstance(channel, discord.TextChannel):
-            await interaction.response.send_message("Nur in Text-Channels verfügbar.", ephemeral=True)
+            await interaction.response.send_message(t("command.clear.reply.text_only"), ephemeral=True)
             return
 
         await interaction.response.defer(ephemeral=True, thinking=True)
@@ -129,21 +139,24 @@ def register_commands(client: discord.Client, tree: app_commands.CommandTree) ->
         try:
             messages = await _bot_messages_in_window(channel, client, window)
         except Exception as exc:
-            await interaction.followup.send(f"Fehler beim Laden der Nachrichten: {exc}", ephemeral=True)
+            await interaction.followup.send(t("command.archive.reply.error_loading", exc=exc), ephemeral=True)
             return
 
         if not messages:
-            await interaction.followup.send("Keine Bot-Nachrichten im Zeitfenster gefunden.", ephemeral=True)
+            await interaction.followup.send(t("command.archive.reply.no_messages"), ephemeral=True)
             return
 
         try:
             archive_thread = await find_or_create_archive_thread(channel)
         except Exception as exc:
-            await interaction.followup.send(f"Archive-Thread konnte nicht geöffnet werden: {exc}", ephemeral=True)
+            await interaction.followup.send(t("command.archive.reply.thread_error", exc=exc), ephemeral=True)
             return
 
         archived = await _archive_to_thread(messages, archive_thread)
 
         label = _window_label(days, hours, minutes)
-        print(f"{MAGENTA}[ARCHIVE]{RESET} #{channel.name}: {archived}/{len(messages)} archiviert ({label}).")
-        await interaction.followup.send(f"{archived} Nachrichten archiviert.", ephemeral=True)
+        print(
+            f"{MAGENTA}[{t('command.archive.banner_prefix')}]{RESET} "
+            f"{t('command.archive.reply.archived_log', channel=channel.name, n=archived, m=len(messages), label=label)}"
+        )
+        await interaction.followup.send(t("command.archive.reply.archived", n=archived), ephemeral=True)
