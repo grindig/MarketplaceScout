@@ -72,6 +72,9 @@ def register_commands(client: discord.Client, tree: app_commands.CommandTree) ->
         hours: int = 0,
         minutes: int = 0,
     ) -> None:
+        # Reject negative inputs: a future window silently deletes nothing and
+        # gives no feedback, so the user assumes the command worked.
+        days, hours, minutes = max(0, days), max(0, hours), max(0, minutes)
         window = _build_window(days, hours, minutes)
         if window is None:
             await interaction.response.send_message("Bitte mindestens einen Wert > 0 angeben.", ephemeral=True)
@@ -111,6 +114,7 @@ def register_commands(client: discord.Client, tree: app_commands.CommandTree) ->
         hours: int = 0,
         minutes: int = 0,
     ) -> None:
+        days, hours, minutes = max(0, days), max(0, hours), max(0, minutes)
         window = _build_window(days, hours, minutes)
         if window is None:
             await interaction.response.send_message("Bitte mindestens einen Wert > 0 angeben.", ephemeral=True)
