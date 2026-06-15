@@ -3,6 +3,7 @@
 import discord
 
 from colors import RESET, BOLD, YELLOW, GREEN
+from i18n import t
 
 CHECK_EMOJI = "\U00002705"  # ✅
 
@@ -38,7 +39,7 @@ async def mark_message(client: discord.Client, payload: discord.RawReactionActio
     try:
         message = await channel.fetch_message(payload.message_id)
     except Exception as exc:
-        print(f"{BOLD}{YELLOW}[WARN]{RESET} Marker: could not fetch message {payload.message_id}: {exc}")
+        print(f"{BOLD}{YELLOW}[{t('warn.banner_prefix')}]{RESET} " + t("marker.fetch_failed", id=payload.message_id, exc=exc))
         return
 
     if message.author.id != client.user.id:
@@ -47,7 +48,7 @@ async def mark_message(client: discord.Client, payload: discord.RawReactionActio
     try:
         marked_thread = await find_or_create_marked_thread(channel)
     except Exception as exc:
-        print(f"{BOLD}{YELLOW}[WARN]{RESET} Marker: could not find/create marked thread: {exc}")
+        print(f"{BOLD}{YELLOW}[{t('warn.banner_prefix')}]{RESET} " + t("marker.thread_failed", exc=exc))
         return
 
     try:
@@ -57,11 +58,11 @@ async def mark_message(client: discord.Client, payload: discord.RawReactionActio
             embeds=message.embeds,
         )
     except Exception as exc:
-        print(f"{BOLD}{YELLOW}[WARN]{RESET} Marker: could not post to marked thread: {exc}")
+        print(f"{BOLD}{YELLOW}[{t('warn.banner_prefix')}]{RESET} " + t("marker.send_failed", exc=exc))
         return
 
     try:
         await message.delete()
-        print(f"{GREEN}[MARKED]{RESET} Message {message.id} marked.")
+        print(f"{GREEN}[MARKED]{RESET} " + t("marker.message_marked", id=message.id))
     except Exception as exc:
-        print(f"{BOLD}{YELLOW}[WARN]{RESET} Marker: could not delete original message {message.id}: {exc}")
+        print(f"{BOLD}{YELLOW}[{t('warn.banner_prefix')}]{RESET} " + t("marker.delete_failed", id=message.id, exc=exc))
