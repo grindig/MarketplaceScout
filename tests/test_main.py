@@ -128,6 +128,56 @@ def test_scan_loop_skips_listing_already_seen(monkeypatch):
     assert sends == []  # already-seen listing was skipped, never sent
 
 
+def test_scan_loop_sends_listing_when_historical_average_is_zero(monkeypatch):
+    """A zero price-history average must not abort delivery of the listing."""
+    listing = {"id": "42", "title": "RTX 3060", "price": 100.0, "url": "", "location": ""}
+
+    monkeypatch.setattr(main, "scan_once", lambda cfg: [listing])
+    monkeypatch.setattr(main, "find_gpu_model", lambda title, models: "RTX 3060")
+    monkeypatch.setattr(main, "get_stats", lambda model: {"avg": 0.0, "count": 2})
+    monkeypatch.setattr(main, "save_seen", lambda seen: None)
+
+    recorded: list[tuple[str, float]] = []
+    monkeypatch.setattr(main, "record_price", lambda model, price: recorded.append((model, price)))
+
+    sends: list[dict] = []
+
+    async def fake_send(channel, lst, mention=True):
+        sends.append(dict(lst))
+        return True
+
+    monkeypatch.setattr(main, "send_notification", fake_send)
+
+    seen: set[str] = set()
+    config = {"keywords": ["RTX"], "scan_interval_seconds": 3600, "gpu_models": ["RTX 3060"]}
+    channel_cfg = {
+        "channel_id": "1",
+        "max_price": None,
+        "search_urls": ["u1"],
+        "track_prices": True,
+        "show_price_stats": True,
+    }
+
+    async def drive():
+        task = asyncio.create_task(
+            main.scan_loop(_FakeClient(_FakeChannel()), config, channel_cfg, seen)
+        )
+        for _ in range(20):
+            await asyncio.sleep(0)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+    asyncio.run(drive())
+
+    assert [s["id"] for s in sends] == ["42"]
+    assert "price_stats" not in sends[0]
+    assert recorded == [("RTX 3060", 100.0)]
+    assert seen == {"42"}
+
+
 def _make_send_stub(result: bool, calls: list):
     async def stub(channel, listing, mention=True):
         calls.append((listing["id"], mention))
