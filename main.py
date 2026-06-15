@@ -3,7 +3,7 @@ import json
 import os
 import sys
 
-from i18n import set_language
+from i18n import set_language, t
 from datetime import datetime, timedelta
 
 from dotenv import load_dotenv
@@ -29,12 +29,12 @@ KEYWORDS_PATH = os.path.join(BOT_DIR, "json", "keywords.json")
 def load_config() -> dict:
     if not os.path.exists(CONFIG_PATH):
         print(
-            f"{BOLD}{RED}[ERROR]{RESET} {CONFIG_PATH} fehlt.\n"
-            f"Kopiere json/config.example.json nach json/config.json und trage deine Channel-IDs ein."
+            f"{BOLD}{RED}[{t('error.banner_prefix')}]{RESET} "
+            + t("error.config_missing", path=CONFIG_PATH)
         )
         sys.exit(1)
     if not os.path.exists(KEYWORDS_PATH):
-        print(f"{BOLD}{RED}[ERROR]{RESET} {KEYWORDS_PATH} fehlt (keywords.json mit 'general' und 'gpu_models' Listen).")
+        print(f"{BOLD}{RED}[{t('error.banner_prefix')}]{RESET} " + t("error.keywords_missing", path=KEYWORDS_PATH))
         sys.exit(1)
     with open(CONFIG_PATH, "r", encoding="utf-8") as f:
         config = json.load(f)
@@ -46,7 +46,7 @@ def load_config() -> dict:
     try:
         set_language(config["language"])
     except ValueError as exc:
-        print(f"{BOLD}{RED}[ERROR]{RESET} {exc}")
+        print(f"{BOLD}{RED}[{t('error.banner_prefix')}]{RESET} {exc}")
         sys.exit(1)
     return config
 
@@ -78,7 +78,7 @@ def scan_once(config: dict) -> list[dict]:
             html = fetch_html(url)
             all_listings = parse_listings(html)
         except Exception as exc:
-            print(f"{BOLD}{YELLOW}[WARN]{RESET} Scan: URL fehlgeschlagen ({url}): {exc}")
+            print(f"{BOLD}{YELLOW}[{t('warn.banner_prefix')}]{RESET} " + t("scan.url_failed", url=url, exc=exc))
             continue
         for item in filter_listings(all_listings, config["keywords"], config["max_price"]):
             if item["id"] not in cycle_ids:
@@ -152,7 +152,7 @@ async def backfill_channel(
     if channel is None:
         return
 
-    print(f"{DARK_GRAY}[{YELLOW}BACKFILL{DARK_GRAY}]{RESET} #{channel.name}: hole letzte {days_back} Tage...")
+    print(f"{DARK_GRAY}[{YELLOW}{t('backfill.banner_prefix')}{DARK_GRAY}]{RESET} " + t("backfill.fetching", channel=channel.name, days=days_back))
 
     all_backfill: list[dict] = []
     pending_ids: set[str] = set()  # the same listing may appear in several search URLs
@@ -165,17 +165,19 @@ async def backfill_channel(
                 all_backfill.append(listing)
 
     if not all_backfill:
-        print(f"{DARK_GRAY}[{YELLOW}BACKFILL{DARK_GRAY}]{RESET} #{channel.name}: keine neuen Inserate gefunden.")
+        print(f"{DARK_GRAY}[{YELLOW}{t('backfill.banner_prefix')}{DARK_GRAY}]{RESET} " + t("backfill.none_found", channel=channel.name))
         return
 
-    print(f"{DARK_GRAY}[{YELLOW}BACKFILL{DARK_GRAY}]{RESET} #{channel.name}: {GREEN}{len(all_backfill)}{RESET} Inserate werden gesendet...")
+    n_listings = len(all_backfill)
+    msg = t("backfill.sending", channel=channel.name, n=n_listings)
+    print(f"{DARK_GRAY}[{YELLOW}{t('backfill.banner_prefix')}{DARK_GRAY}]{RESET} " + msg.replace(str(n_listings), f"{GREEN}{n_listings}{RESET}", 1))
     for listing in all_backfill:
         # mention=False: a multi-day catch-up must not @here-ping per listing
         await _send_and_mark(channel, listing, seen_ids, mention=False)
         await asyncio.sleep(0.5)  # Discord rate limit
 
     save_seen(seen_ids)
-    print(f"{DARK_GRAY}[{YELLOW}BACKFILL{DARK_GRAY}]{RESET} #{channel.name}: fertig.")
+    print(f"{DARK_GRAY}[{YELLOW}{t('backfill.banner_prefix')}{DARK_GRAY}]{RESET} " + t("backfill.done", channel=channel.name))
 
 
 async def scan_loop(client: discord.Client, config: dict, channel_cfg: dict, seen_ids: set[str]) -> None:
@@ -184,19 +186,22 @@ async def scan_loop(client: discord.Client, config: dict, channel_cfg: dict, see
 
     channel = client.get_channel(int(channel_cfg["channel_id"]))
     if channel is None:
-        print(f"{BOLD}{RED}[ERROR]{RESET} Channel {channel_cfg['channel_id']} nicht gefunden.")
+        print(f"{BOLD}{RED}[{t('error.banner_prefix')}]{RESET} " + t("error.channel_not_found", channel_id=channel_cfg['channel_id']))
         return
 
     scan_count = 0
     interval = config.get("scan_interval_seconds", 60)
 
     print(f"{DARK_GRAY}{'=' * 50}{RESET}")
-    print(f"{DARK_GRAY}[{CYAN}BOOT{DARK_GRAY}]{RESET} Scanner gestartet: {DARK_GRAY}#{GREEN}{channel.name}{RESET}")
-    print(f"{DARK_GRAY}[{CYAN}BOOT{DARK_GRAY}]{RESET} URLs: {len(channel_cfg['search_urls'])}")
-    print(f"{DARK_GRAY}[{CYAN}BOOT{DARK_GRAY}]{RESET} Keywords: {len(config['keywords'])}")
-    max_price_display = f"{channel_cfg['max_price']} EUR" if channel_cfg['max_price'] is not None else "unbegrenzt"
-    print(f"{DARK_GRAY}[{CYAN}BOOT{DARK_GRAY}]{RESET} Max Preis: {max_price_display}")
-    print(f"{DARK_GRAY}[{CYAN}BOOT{DARK_GRAY}]{RESET} Intervall: {interval}s")
+    boot_prefix = f"{DARK_GRAY}[{CYAN}{t('boot.banner_prefix')}{DARK_GRAY}]{RESET}"
+    print(boot_prefix + " " + t("boot.scanner_started", channel=channel.name))
+    print(boot_prefix + " " + t("boot.urls_count", n=len(channel_cfg['search_urls'])))
+    print(boot_prefix + " " + t("boot.keywords_count", n=len(config['keywords'])))
+    if channel_cfg['max_price'] is not None:
+        print(boot_prefix + " " + t("boot.max_price_limit", price=channel_cfg['max_price']))
+    else:
+        print(boot_prefix + " " + t("boot.max_price_unlimited"))
+    print(boot_prefix + " " + t("boot.interval", n=interval))
     print(f"{DARK_GRAY}{'=' * 50}{RESET}")
 
     # Build a per-channel config slice for scan_once
@@ -214,7 +219,7 @@ async def scan_loop(client: discord.Client, config: dict, channel_cfg: dict, see
 
             if new_listings:
                 await SPINNER.pause()
-                print(f"{BOLD}{GREEN}[#{channel.name} SCAN #{scan_count}]{RESET} {len(new_listings)} neue Treffer!")
+                print(f"{BOLD}{GREEN}" + t("scan.new_hits", channel=channel.name, n=scan_count, m=len(new_listings)) + f"{RESET}")
                 sent_any = False
                 for listing in new_listings:
                     # All channels share one seen_ids set. new_listings was
@@ -253,14 +258,14 @@ async def scan_loop(client: discord.Client, config: dict, channel_cfg: dict, see
 
         except Exception as e:
             await SPINNER.pause()
-            print(f"{BOLD}{YELLOW}[WARN]{RESET} #{channel.name} Scan #{scan_count} fehlgeschlagen: {e}")
+            print(f"{BOLD}{YELLOW}[{t('warn.banner_prefix')}]{RESET} " + t("scan.scan_failed", channel=channel.name, n=scan_count, e=e))
 
         SPINNER.resume()
         await asyncio.sleep(interval)
 
 
 def restart():
-    print(f"\n{CYAN}[RESTART]{RESET} Neustart...")
+    print(f"\n{CYAN}[{t('restart.banner_prefix')}]{RESET} " + t("restart.in_progress"))
     os.execv(sys.executable, [sys.executable] + sys.argv)
 
 
@@ -270,7 +275,7 @@ async def midnight_restart():
         now = datetime.now()
         next_midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
         seconds_until_midnight = (next_midnight - now).total_seconds()
-        print(f"{DARK_GRAY}[{YELLOW}SCHEDULER{DARK_GRAY}]{RESET} {LIGHT_GRAY}Nächster Neustart: {next_midnight.strftime('%d.%m.%Y %H:%M')}{RESET}")
+        print(f"{DARK_GRAY}[{YELLOW}{t('scheduler.banner_prefix')}{DARK_GRAY}]{RESET} {LIGHT_GRAY}" + t("scheduler.next_restart", datetime=next_midnight.strftime('%d.%m.%Y %H:%M')) + f"{RESET}")
         await asyncio.sleep(seconds_until_midnight)
         restart()
 
@@ -309,7 +314,7 @@ def main():
     @client.event
     async def on_ready():
         nonlocal started
-        print(f"{DARK_GRAY}[{CYAN}BOOT{DARK_GRAY}]{RESET} Bot eingeloggt als {client.user}")
+        print(f"{DARK_GRAY}[{CYAN}{t('boot.banner_prefix')}{DARK_GRAY}]{RESET} " + t("boot.logged_in", user=client.user))
         if started:
             # on_ready re-fires after gateway reconnects; the background
             # tasks are already running and must not be duplicated.
@@ -318,9 +323,9 @@ def main():
 
         try:
             synced = await tree.sync()
-            print(f"{DARK_GRAY}[{CYAN}BOOT{DARK_GRAY}]{RESET} {len(synced)} Slash-Commands synchronisiert.")
+            print(f"{DARK_GRAY}[{CYAN}{t('boot.banner_prefix')}{DARK_GRAY}]{RESET} " + t("boot.commands_synced", n=len(synced)))
         except Exception as exc:
-            print(f"{BOLD}{YELLOW}[WARN]{RESET} Command-Sync fehlgeschlagen: {exc}")
+            print(f"{BOLD}{YELLOW}[{t('warn.banner_prefix')}]{RESET} " + t("boot.commands_sync_failed", exc=exc))
 
         seen_ids = load_seen()
         stats_channel_id = config.get("stats_channel_id")
@@ -333,9 +338,9 @@ def main():
                 await backfill_channel(client, config, channel_cfg, seen_ids, backfill_days)
             try:
                 reset_backfill_days()
-                print(f"{DARK_GRAY}[{YELLOW}BACKFILL{DARK_GRAY}]{RESET} {GREEN}Backfill abgeschlossen.{RESET} backfill_days wurde auf 0 zurückgesetzt.")
+                print(f"{DARK_GRAY}[{YELLOW}{t('backfill.banner_prefix')}{DARK_GRAY}]{RESET} {GREEN}" + t("backfill.complete") + f"{RESET}")
             except Exception as exc:
-                print(f"{BOLD}{YELLOW}[WARN]{RESET} backfill_days konnte nicht zurückgesetzt werden: {exc}")
+                print(f"{BOLD}{YELLOW}[{t('warn.banner_prefix')}]{RESET} " + t("backfill.reset_failed", exc=exc))
 
         for channel_cfg in config["channels"]:
             asyncio.create_task(scan_loop(client, config, channel_cfg, seen_ids))
@@ -355,14 +360,14 @@ def main():
 
     bot_token = os.environ.get("WILLHABEN_BOT_TOKEN")
     if not bot_token:
-        print(f"{BOLD}{RED}[ERROR]{RESET} WILLHABEN_BOT_TOKEN Umgebungsvariable nicht gesetzt (siehe .env.example).")
+        print(f"{BOLD}{RED}[{t('error.banner_prefix')}]{RESET} " + t("error.token_missing"))
         sys.exit(1)
 
     try:
         client.run(bot_token)
     except KeyboardInterrupt:
         # seen.json is already saved after every scan that finds something new
-        print(f"\n{CYAN}[STOP]{RESET} Scanner gestoppt.")
+        print(f"\n{CYAN}[{t('stop.banner_prefix')}]{RESET} " + t("stop.scanner_stopped"))
         sys.exit(0)
 
 
