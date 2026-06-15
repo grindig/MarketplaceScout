@@ -5,18 +5,19 @@ from datetime import datetime, timezone
 import discord
 
 from colors import RESET, BOLD, YELLOW
+from i18n import t
 
 
 def build_embed(listing: dict) -> discord.Embed:
     """Build a Discord embed from a listing."""
     price = listing.get("price")
     if price is None:
-        price_value = "Kein Preis"
+        price_value = t("embed.no_price")
     elif price == int(price):
         price_value = f"{int(price)} €"
     else:
         price_value = f"{price:.2f} €".replace(".", ",")
-    location = listing.get("location") or "Unbekannt"
+    location = listing.get("location") or t("embed.location_unknown")
 
     embed = discord.Embed(
         title=listing["title"],
@@ -27,9 +28,9 @@ def build_embed(listing: dict) -> discord.Embed:
     image_url = listing.get("image_url")
     if image_url:
         embed.set_thumbnail(url=image_url)
-    embed.add_field(name="Preis", value=price_value, inline=True)
-    embed.add_field(name="Standort", value=location, inline=True)
-    embed.add_field(name="PayLivery", value="✅" if listing.get("paylivery") else "❌", inline=True)
+    embed.add_field(name=t("embed.field.price"), value=price_value, inline=True)
+    embed.add_field(name=t("embed.field.location"), value=location, inline=True)
+    embed.add_field(name=t("embed.field.paylivery"), value="✅" if listing.get("paylivery") else "❌", inline=True)
     stats = listing.get("price_stats")
     if stats:
         avg = stats["avg"]
@@ -38,10 +39,16 @@ def build_embed(listing: dict) -> discord.Embed:
             avg_str = f"{int(avg)} €"
         else:
             avg_str = f"{avg:.2f} €".replace(".", ",")
-        direction = "über" if pct >= 0 else "unter"
+        direction = t("embed.field.avg_price.below" if pct < 0 else "embed.field.avg_price.above")
         embed.add_field(
-            name="Ø-Preis",
-            value=f"{avg_str} ({pct:+.0f}% {direction} Ø, {stats['count']} Inserate)",
+            name=t("embed.field.avg_price"),
+            value=t(
+                "embed.field.avg_price.value",
+                avg=avg_str,
+                pct=pct,
+                direction=direction,
+                count=stats["count"],
+            ),
             inline=False,
         )
     return embed
