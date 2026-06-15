@@ -8,7 +8,7 @@ Built for one job: catch the underpriced and the broken-but-fixable **first**.
 
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![discord.py](https://img.shields.io/badge/discord.py-2.x-5865F2)
-![tests](https://img.shields.io/badge/tests-68%20passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-75%20passing-brightgreen)
 ![made in](https://img.shields.io/badge/made%20for-🇦🇹%20willhaben-red)
 
 ---
@@ -144,6 +144,7 @@ Every new match lands as an embed with an `@here`:
 > **Zorac RTX 3080 Amp Holo**
 > Preis: **399 €** · Standort: **Wien, Meidling** · PayLivery: ✅
 > Ø-Preis: 450 € (−11% unter Ø, 23 Inserate)
+> 🖼️ Thumbnail of the listing photo.
 
 ### Reactions
 
