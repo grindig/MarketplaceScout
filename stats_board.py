@@ -120,12 +120,16 @@ async def stats_init(client: discord.Client, channel_id: str | None) -> discord.
         for i, gen in enumerate(_GENERATIONS)
     ]
 
-    if message is None:
-        message = await channel.send(embeds=embeds)
-        _save_state(channel_id, message.id)
-        print(f"{_TAG} {LIGHT_GRAY}" + t("stats.new_message", id=message.id) + f"{RESET}")
-    else:
-        await message.edit(embeds=embeds)
+    try:
+        if message is None:
+            message = await channel.send(embeds=embeds)
+            _save_state(channel_id, message.id)
+            print(f"{_TAG} {LIGHT_GRAY}" + t("stats.new_message", id=message.id) + f"{RESET}")
+        else:
+            await message.edit(embeds=embeds)
+    except Exception as e:
+        print(f"{_TAG} {LIGHT_GRAY}" + t("stats.update_failed", e=e) + f"{RESET}")
+        return None
 
     return message
 
