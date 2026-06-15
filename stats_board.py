@@ -61,21 +61,33 @@ def build_gen_embed(gen: str, prices: dict, show_footer: bool = False) -> discor
         if not history:
             continue
         if len(history) == 1:
-            value = f"{_fmt(history[0])} · 1 Inserat"
+            value = t("stats_board.field.value_single", price=_fmt(history[0]))
         else:
             avg = sum(history) / len(history)
-            value = (
-                f"Ø {_fmt(avg)} · {len(history)} Inserate\n"
-                f"Min {_fmt(min(history))} · Max {_fmt(max(history))}"
+            value = t(
+                "stats_board.field.value_multi",
+                avg=_fmt(avg),
+                n=len(history),
+                min=_fmt(min(history)),
+                max=_fmt(max(history)),
             )
         embed.add_field(name=model, value=value, inline=True)
 
     if not models:
-        embed.add_field(name="Keine Daten", value="Noch keine Daten vorhanden", inline=True)
+        embed.add_field(
+            name=t("stats_board.field.no_data_name"),
+            value=t("stats_board.field.no_data_value"),
+            inline=True,
+        )
 
     if show_footer:
         now = datetime.now()
-        embed.set_footer(text=f"Zuletzt aktualisiert: {now.strftime('%d.%m.%Y · %H:%M')} Uhr")
+        embed.set_footer(
+            text=t(
+                "stats_board.footer.last_updated",
+                datetime=now.strftime("%d.%m.%Y · %H:%M"),
+            )
+        )
 
     return embed
 
