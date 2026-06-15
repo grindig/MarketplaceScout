@@ -3,6 +3,8 @@
 import json
 import os
 
+from i18n import t
+
 SEEN_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "json", "seen.json")
 
 
@@ -14,7 +16,7 @@ def load_seen(path: str = SEEN_PATH) -> set[str]:
         with open(path, "r", encoding="utf-8") as f:
             return set(json.load(f))
     except (json.JSONDecodeError, OSError):
-        print("[WARN] seen.json could not be read, starting fresh.")
+        print(f"[{t('warn.banner_prefix')}] " + t("storage.seen_corrupt"))
         return set()
 
 
