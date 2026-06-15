@@ -2,6 +2,8 @@ import asyncio
 import json
 import os
 import sys
+
+from i18n import set_language
 from datetime import datetime, timedelta
 
 from dotenv import load_dotenv
@@ -40,6 +42,12 @@ def load_config() -> dict:
         kw = json.load(f)
     config["keywords"] = kw["general"] + kw["gpu_models"]
     config["gpu_models"] = kw["gpu_models"]
+    config["language"] = config.get("language", "en")
+    try:
+        set_language(config["language"])
+    except ValueError as exc:
+        print(f"{BOLD}{RED}[ERROR]{RESET} {exc}")
+        sys.exit(1)
     return config
 
 
