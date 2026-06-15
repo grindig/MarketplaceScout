@@ -33,7 +33,7 @@ issues found in the 2026-06-12 code review.
 ### Deployability
 - **README.md**: features, requirements, setup (venv, pip, .env, config), config key
   reference, slash commands and reactions, operational notes.
-- **`.env.example`** with `WILLHABEN_BOT_TOKEN=`.
+- **`.env.example`** with `DISCORD_BOT_TOKEN=`.
 - **`json/config.example.json`** with placeholder channel IDs mirroring the real shape.
 - **`.gitignore`**: stop ignoring `tests/` and `docs/`; keep ignoring `.env`,
   `json/config.json`, `json/seen.json`, `json/prices.json`, `json/stats_state.json`,
