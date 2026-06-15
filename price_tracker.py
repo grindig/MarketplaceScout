@@ -5,6 +5,8 @@ import os
 import re
 from typing import Optional
 
+from i18n import t
+
 PRICES_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "json", "prices.json")
 
 _WHITESPACE = re.compile(r"\s+")
@@ -43,7 +45,7 @@ def _load(prices_path: str) -> dict:
             with open(prices_path, "r", encoding="utf-8") as f:
                 prices = json.load(f)
         except (json.JSONDecodeError, OSError):
-            print("[WARN] prices.json could not be read, starting fresh.")
+            print(f"[{t('warn.banner_prefix')}] " + t("price_tracker.prices_corrupt"))
     _cache[prices_path] = prices
     return prices
 
