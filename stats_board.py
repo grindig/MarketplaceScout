@@ -9,6 +9,7 @@ from datetime import datetime
 import discord
 
 from colors import CYAN, DARK_GRAY, LIGHT_GRAY, RESET
+from i18n import t
 from price_tracker import _load, PRICES_PATH
 
 STATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "json", "stats_state.json")
@@ -84,12 +85,12 @@ async def stats_init(client: discord.Client, channel_id: str | None) -> discord.
     if not channel_id:
         return None
 
-    print(f"{_TAG} {LIGHT_GRAY}Preisübersicht wird initialisiert...{RESET}")
+    print(f"{_TAG} {LIGHT_GRAY}" + t("stats.initializing") + f"{RESET}")
 
     try:
         channel = await client.fetch_channel(int(channel_id))
     except (ValueError, discord.NotFound, discord.Forbidden, discord.HTTPException) as e:
-        print(f"{_TAG} {LIGHT_GRAY}Kanal {channel_id} nicht erreichbar: {e}{RESET}")
+        print(f"{_TAG} {LIGHT_GRAY}" + t("stats.channel_unreachable", channel_id=channel_id, e=e) + f"{RESET}")
         return None
 
     state = _load_state()
@@ -97,9 +98,9 @@ async def stats_init(client: discord.Client, channel_id: str | None) -> discord.
     if state.get("channel_id") == channel_id and state.get("message_id"):
         try:
             message = await channel.fetch_message(state["message_id"])
-            print(f"{_TAG} {LIGHT_GRAY}Bestehende Nachricht gefunden ({message.id}), wird aktualisiert.{RESET}")
+            print(f"{_TAG} {LIGHT_GRAY}" + t("stats.existing_message", id=message.id) + f"{RESET}")
         except Exception as e:
-            print(f"{_TAG} {LIGHT_GRAY}Bestehende Nachricht nicht abrufbar ({e}), neue wird gepostet.{RESET}")
+            print(f"{_TAG} {LIGHT_GRAY}" + t("stats.message_unfetchable", e=e) + f"{RESET}")
 
     prices = _load(PRICES_PATH)
     embeds = [
@@ -110,7 +111,7 @@ async def stats_init(client: discord.Client, channel_id: str | None) -> discord.
     if message is None:
         message = await channel.send(embeds=embeds)
         _save_state(channel_id, message.id)
-        print(f"{_TAG} {LIGHT_GRAY}Neue Nachricht gepostet ({message.id}).{RESET}")
+        print(f"{_TAG} {LIGHT_GRAY}" + t("stats.new_message", id=message.id) + f"{RESET}")
     else:
         await message.edit(embeds=embeds)
 
@@ -138,4 +139,4 @@ async def stats_loop(client: discord.Client, channel_id: str, message: discord.M
                 message = await channel.send(embeds=embeds)
                 _save_state(channel_id, message.id)
         except Exception as e:
-            print(f"{_TAG} {LIGHT_GRAY}Update fehlgeschlagen, nächster Versuch in 1h: {e}{RESET}")
+            print(f"{_TAG} {LIGHT_GRAY}" + t("stats.update_failed", e=e) + f"{RESET}")
