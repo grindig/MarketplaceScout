@@ -358,7 +358,7 @@ def main():
         await archive_message(client, payload)
         await mark_message(client, payload)
 
-    bot_token = os.environ.get("WILLHABEN_BOT_TOKEN")
+    bot_token = os.environ.get("DISCORD_BOT_TOKEN")
     if not bot_token:
         print(f"{BOLD}{RED}[{t('error.banner_prefix')}]{RESET} " + t("error.token_missing"))
         sys.exit(1)
