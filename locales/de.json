@@ -25,7 +25,7 @@
   "command.archive.reply.thread_error": "Archive-Thread konnte nicht geöffnet werden: {exc}",
   "command.archive.reply.archived": "{n} Nachrichten archiviert.",
   "command.archive.reply.archived_log": "#{channel}: {n}/{m} archiviert ({label}).",
-  "error.token_missing": "WILLHABEN_BOT_TOKEN Umgebungsvariable nicht gesetzt (siehe .env.example).",
+  "error.token_missing": "DISCORD_BOT_TOKEN Umgebungsvariable nicht gesetzt (siehe .env.example).",
   "error.config_missing": "{path} fehlt.\nKopiere json/config.example.json nach json/config.json und trage deine Channel-IDs ein.",
   "error.keywords_missing": "{path} fehlt (keywords.json mit 'general' und 'gpu_models' Listen).",
   "error.channel_not_found": "Channel {channel_id} nicht gefunden.",
