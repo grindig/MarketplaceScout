@@ -50,7 +50,7 @@ def test_parse_listings_returns_list(listings):
 
 def test_parse_listings_has_required_fields(listings):
     """Every listing dict contains id, title, price, url, location."""
-    required = {"id", "title", "price", "url", "location"}
+    required = {"id", "title", "price", "url", "location", "image_url"}
     for item in listings:
         assert required.issubset(item.keys()), f"Missing keys in {item}"
 
@@ -59,6 +59,29 @@ def test_parse_listings_id_is_string(listings):
     """All listing IDs are strings."""
     for item in listings:
         assert isinstance(item["id"], str), f"ID is not a string: {item['id']}"
+
+
+def test_parse_listings_extracts_image_url(listings):
+    """Every parsed listing with an image has a non-empty image_url string."""
+    for item in listings:
+        assert "image_url" in item, f"Missing image_url in {item}"
+    with_images = [i for i in listings if i["image_url"]]
+    assert with_images, "Fixture should contain at least one listing with an image"
+
+
+def test_parse_listings_no_image_url_when_missing():
+    """An item without advertImageList still parses, with image_url=''."""
+    html = (
+        '<html><script id="__NEXT_DATA__">'
+        '{"props":{"pageProps":{"searchResult":'
+        '{"advertSummaryList":{"advertSummary":'
+        '[{"id":"1","description":"x","attributes":{"attribute":[]}}]}}}}}'
+        '</script></html>'
+    )
+    result = parse_listings(html)
+    assert result == [{"id": "1", "title": "x", "price": None, "url": "",
+                       "location": "", "published": None, "paylivery": False,
+                       "image_url": ""}]
 
 
 # ---------------------------------------------------------------------------

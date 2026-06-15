@@ -148,6 +148,11 @@ def parse_listings(html: str) -> list[dict]:
         if seo_url:
             url = "https://www.willhaben.at/iad/" + seo_url
 
+        image_url = ""
+        advert_image_list = item.get("advertImageList", {}).get("advertImage") or []
+        if advert_image_list:
+            image_url = advert_image_list[0].get("mainImageUrl") or ""
+
         listings.append(
             {
                 "id": str(item_id),
@@ -157,6 +162,7 @@ def parse_listings(html: str) -> list[dict]:
                 "location": location or "",
                 "published": published,
                 "paylivery": paylivery,
+                "image_url": image_url,
             }
         )
 
