@@ -7,7 +7,8 @@ from stats_board import build_gen_embed
 def test_empty_prices_shows_no_data():
     embed = build_gen_embed("30xx", {})
     assert len(embed.fields) == 1
-    assert "Noch keine Daten vorhanden" in embed.fields[0].value
+    assert "No data available yet" in embed.fields[0].value
+    assert embed.fields[0].name == "No data"
 
 
 def test_single_price_no_average():
@@ -15,7 +16,7 @@ def test_single_price_no_average():
     field = embed.fields[0]
     assert field.name == "RTX 3060 Ti"
     assert "240 €" in field.value
-    assert "1 Inserat" in field.value
+    assert "1 listing" in field.value
     assert "Ø" not in field.value
 
 
@@ -24,7 +25,7 @@ def test_multi_price_shows_avg_min_max():
     field = embed.fields[0]
     assert field.name == "RTX 3070"
     assert "Ø" in field.value
-    assert "5 Inserate" in field.value
+    assert "5 listings" in field.value
     assert "Min 249 €" in field.value
     assert "Max 550 €" in field.value
 
@@ -57,8 +58,8 @@ def test_all_embeds_are_green():
 
 def test_footer_shown_when_requested():
     embed = build_gen_embed("50xx", {}, show_footer=True)
-    assert embed.footer.text.startswith("Zuletzt aktualisiert:")
-    assert "Uhr" in embed.footer.text
+    assert embed.footer.text.startswith("Last updated:")
+    assert "Uhr" not in embed.footer.text
 
 
 def test_no_footer_by_default():
@@ -96,3 +97,36 @@ def test_generation_unknown_models_are_other():
     assert _generation("RX 580") == "other"  # must not land in 50xx
     assert _generation("RX 7900") == "other"
     assert _generation("Quadro P4000") == "other"
+
+
+class TestStatsBoardGerman:
+    """Drive build_gen_embed through German to catch any un-translated string."""
+
+    def setup_method(self):
+        from i18n import set_language
+        set_language("de")
+
+    def teardown_method(self):
+        from i18n import set_language
+        set_language("en")
+
+    def test_empty_prices_german(self):
+        embed = build_gen_embed("30xx", {})
+        assert embed.fields[0].name == "Keine Daten"
+        assert "Noch keine Daten vorhanden" in embed.fields[0].value
+
+    def test_single_listing_german(self):
+        embed = build_gen_embed("30xx", {"RTX 3060 Ti": [240.0]})
+        assert "240 €" in embed.fields[0].value
+        assert "1 Inserat" in embed.fields[0].value
+
+    def test_multi_listing_german(self):
+        embed = build_gen_embed("30xx", {"RTX 3070": [249.0, 300.0, 550.0, 335.0, 330.0]})
+        assert "5 Inserate" in embed.fields[0].value
+        assert "Min 249 €" in embed.fields[0].value
+        assert "Max 550 €" in embed.fields[0].value
+
+    def test_footer_german(self):
+        embed = build_gen_embed("50xx", {}, show_footer=True)
+        assert embed.footer.text.startswith("Zuletzt aktualisiert:")
+        assert embed.footer.text.endswith("Uhr")
