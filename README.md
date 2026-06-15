@@ -83,7 +83,7 @@ pip install -r requirements.txt
 Copy `.env.example` → `.env`:
 
 ```env
-WILLHABEN_BOT_TOKEN=your-bot-token-here
+DISCORD_BOT_TOKEN=your-bot-token-here
 ```
 
 ### 4. Configure
