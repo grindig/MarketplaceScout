@@ -72,6 +72,29 @@ def test_fields_are_inline():
     assert embed.fields[0].inline is True
 
 
+def test_stats_init_returns_none_when_initial_send_fails(tmp_path, monkeypatch):
+    """Stats-board send errors must not abort the bot startup sequence."""
+    import asyncio
+    import price_tracker
+    import stats_board
+
+    class BadChannel:
+        async def send(self, embeds=None):
+            raise RuntimeError("missing Embed Links")
+
+    class FakeClient:
+        async def fetch_channel(self, channel_id):
+            return BadChannel()
+
+    price_tracker._cache.clear()
+    monkeypatch.setattr(stats_board, "STATE_PATH", str(tmp_path / "stats_state.json"))
+    monkeypatch.setattr(stats_board, "PRICES_PATH", str(tmp_path / "prices.json"))
+
+    result = asyncio.run(stats_board.stats_init(FakeClient(), "123"))
+
+    assert result is None
+
+
 def test_price_with_cents():
     embed = build_gen_embed("10xx", {"GTX 1060": [49.5, 51.0]})
     assert "50,25 €" in embed.fields[0].value
