@@ -96,7 +96,8 @@ def _parse_date(date_str: Optional[str]) -> Optional[datetime]:
 def parse_listings(html: str) -> list[dict]:
     """Parse the __NEXT_DATA__ JSON from the HTML and return a list of listing dicts.
 
-    Each dict has keys: ``id``, ``title``, ``price``, ``url``, ``location``, ``published``.
+    Each dict has keys: ``id``, ``title``, ``price``, ``url``, ``location``,
+    ``published``, ``paylivery``, ``image_url``.
     """
     match = _NEXT_DATA_RE.search(html)
     if match is not None:
@@ -149,7 +150,9 @@ def parse_listings(html: str) -> list[dict]:
             url = "https://www.willhaben.at/iad/" + seo_url
 
         image_url = ""
-        advert_image_list = item.get("advertImageList", {}).get("advertImage") or []
+        # `or {}` defends against the key being present with a None value as
+        # well as missing — either way we want an empty list, not a crash.
+        advert_image_list = (item.get("advertImageList") or {}).get("advertImage") or []
         if advert_image_list:
             image_url = advert_image_list[0].get("mainImageUrl") or ""
 
