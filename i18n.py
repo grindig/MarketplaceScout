@@ -1,4 +1,4 @@
-"""Lightweight i18n: load json/locales/<lang>.json at startup, look up strings via t(key, **kwargs).
+"""Lightweight i18n: load locales/<lang>.json at startup, look up strings via t(key, **kwargs).
 
 The active language is set once per process via set_language(code). All lookups
 go through t(), which interpolates {vars} with str.format. If a key is missing
@@ -7,14 +7,14 @@ missing in both, KeyError is raised — that signals a missing translation, not
 a silent fallback to a placeholder.
 
 Adding a new language is two steps:
-1. Drop json/locales/<code>.json with the same keys as en.json.
+1. Drop locales/<code>.json with the same keys as en.json.
 2. Add the code to AVAILABLE_LANGUAGES below.
 """
 
 import json
 from pathlib import Path
 
-_LOCALES_DIR = Path(__file__).parent / "json" / "locales"
+_LOCALES_DIR = Path(__file__).parent / "locales"
 AVAILABLE_LANGUAGES = ("en", "de")
 _FALLBACK = "en"
 
