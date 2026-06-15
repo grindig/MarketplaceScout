@@ -8,7 +8,7 @@ Built for one job: catch the underpriced and the broken-but-fixable **first**.
 
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![discord.py](https://img.shields.io/badge/discord.py-2.x-5865F2)
-![tests](https://img.shields.io/badge/tests-75%20passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-96%20passing-brightgreen)
 ![made in](https://img.shields.io/badge/made%20for-🇦🇹%20willhaben-red)
 
 ---
@@ -113,6 +113,7 @@ Copy `json/config.example.json` → `json/config.json` and fill in your channel 
 | Key | Description |
 |---|---|
 | `scan_interval_seconds` | Seconds between scans (default `60`) |
+| `language` | UI language: `en` (default) or `de`. Requires a restart to apply. |
 | `auto_archive_interval_minutes` | How often the auto-archiver checks for >24h-old listings (default `30`) |
 | `backfill_days` | On startup, fetch the last *N* days (`0` = off — auto-reset to `0` once done) |
 | `stats_channel_id` | Channel for the live stats board (omit to disable) |
@@ -170,6 +171,18 @@ Both default to requiring **Manage Messages** (tweak per server under *Server Se
 
 ---
 
+## Languages
+
+The bot's console output, embed field names, and slash-command descriptions are
+fully translatable. Set `language` in `json/config.json` to one of the available
+codes (currently `en` and `de`) and restart the bot.
+
+Adding a new language is two steps:
+1. Copy `json/locales/en.json` to `json/locales/<code>.json` and translate the values.
+2. Add the code to `AVAILABLE_LANGUAGES` in `i18n.py`.
+
+---
+
 ## 💾 State files
 
 All runtime state lives in `json/` and is git-ignored:
@@ -197,4 +210,4 @@ python -m pytest tests/
 ## 📌 Notes
 
 - The bot identifies as a regular browser and only polls public search pages at a modest rate. **Be considerate** with your scan interval and URL count.
-- Console output is in German, matching the marketplace it watches. 🇦🇹
+- Console output is in the configured language (`en` by default).
