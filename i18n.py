@@ -12,7 +12,6 @@ Adding a new language is two steps:
 """
 
 import json
-import os
 from pathlib import Path
 
 _LOCALES_DIR = Path(__file__).parent / "json" / "locales"
