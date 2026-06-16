@@ -19,7 +19,7 @@ from marker import mark_message
 from colors import RESET, BOLD, DIM, RED, YELLOW, CYAN, GREEN, DARK_GRAY, LIGHT_GRAY
 from price_tracker import find_gpu_model, record_price, get_stats
 from stats_board import stats_init, stats_loop
-from storage import atomic_write_json, load_seen, save_seen, DEFAULT_SEEN_TTL_DAYS
+from storage import atomic_write_json, load_seen, SeenWriter, DEFAULT_SEEN_TTL_DAYS
 
 BOT_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(BOT_DIR, "json", "config.json")
@@ -129,10 +129,15 @@ class _Spinner:
 SPINNER = _Spinner()
 
 
-async def _send_and_mark(channel, listing: dict, seen_ids: set[str], mention: bool = True) -> bool:
-    """Send one listing and mark it seen only on success, so failed sends are retried."""
+async def _send_and_mark(seen_writer: SeenWriter, channel, listing: dict, mention: bool = True) -> bool:
+    """Send one listing and mark it seen only on success, so failed sends are retried.
+
+    Marks via the SeenWriter rather than a raw set so the debounced flush picks
+    it up: the in-memory set is the dedup source of truth within this process,
+    and the next save_seen (timer / shutdown) persists it.
+    """
     if await send_notification(channel, listing, mention=mention):
-        seen_ids.add(listing["id"])
+        seen_writer.add(listing["id"])
         return True
     return False
 
@@ -141,7 +146,7 @@ async def backfill_channel(
     client: discord.Client,
     config: dict,
     channel_cfg: dict,
-    seen_ids: set[str],
+    seen_writer: SeenWriter,
     days_back: int,
 ) -> None:
     """Fetch listings from the last ``days_back`` days and send them as Discord notifications."""
@@ -156,7 +161,7 @@ async def backfill_channel(
     for url in channel_cfg["search_urls"]:
         listings = await asyncio.to_thread(fetch_listings_since, url, days_back)
         filtered = filter_listings(listings, config["keywords"], channel_cfg["max_price"])
-        for listing in filter_new(filtered, seen_ids):
+        for listing in filter_new(filtered, seen_writer.seen):
             if listing["id"] not in pending_ids:
                 pending_ids.add(listing["id"])
                 all_backfill.append(listing)
@@ -170,14 +175,17 @@ async def backfill_channel(
     print(f"{DARK_GRAY}[{YELLOW}{t('backfill.banner_prefix')}{DARK_GRAY}]{RESET} " + msg.replace(str(n_listings), f"{GREEN}{n_listings}{RESET}", 1))
     for listing in all_backfill:
         # mention=False: a multi-day catch-up must not @here-ping per listing
-        await _send_and_mark(channel, listing, seen_ids, mention=False)
+        await _send_and_mark(seen_writer, channel, listing, mention=False)
         await asyncio.sleep(0.5)  # Discord rate limit
 
-    save_seen(seen_ids, ttl_days=config.get("seen_ttl_days", DEFAULT_SEEN_TTL_DAYS))
+    # Backfill mutates many IDs in a single pass; flushing immediately keeps
+    # the on-disk file consistent with what was actually delivered, so a
+    # crash mid-bot doesn't replay a partial backfill on next start.
+    await seen_writer.flush_now()
     print(f"{DARK_GRAY}[{YELLOW}{t('backfill.banner_prefix')}{DARK_GRAY}]{RESET} " + t("backfill.done", channel=channel.name))
 
 
-async def scan_loop(client: discord.Client, config: dict, channel_cfg: dict, seen_ids: set[str]) -> None:
+async def scan_loop(client: discord.Client, config: dict, channel_cfg: dict, seen_writer: SeenWriter) -> None:
     """Background task: scan Willhaben for one channel and notify on new listings."""
     await client.wait_until_ready()
 
@@ -188,6 +196,7 @@ async def scan_loop(client: discord.Client, config: dict, channel_cfg: dict, see
 
     scan_count = 0
     interval = config.get("scan_interval_seconds", 60)
+    seen_ids = seen_writer.seen  # alias; SeenWriter.add() mutates the same set
 
     print(f"{DARK_GRAY}{'=' * 50}{RESET}")
     boot_prefix = f"{DARK_GRAY}[{CYAN}{t('boot.banner_prefix')}{DARK_GRAY}]{RESET}"
@@ -217,16 +226,15 @@ async def scan_loop(client: discord.Client, config: dict, channel_cfg: dict, see
             if new_listings:
                 await SPINNER.pause()
                 print(f"{BOLD}{GREEN}" + t("scan.new_hits", channel=channel.name, n=scan_count, m=len(new_listings)) + f"{RESET}")
-                sent_any = False
                 for listing in new_listings:
-                    # All channels share one seen_ids set. new_listings was
+                    # All channels share one SeenWriter. new_listings was
                     # computed before the awaits below, so another channel's
                     # loop may have sent the same listing in the meantime —
                     # re-check here so a listing shared across channels' URLs
                     # isn't posted twice.
                     if listing["id"] in seen_ids:
                         continue
-                    price_str = f"{listing['price']:.2f} EUR" if listing["price"] is not None else "N/A"
+                    price_str = f"{listing['price']:.2f} EUR" if listing['price'] is not None else "N/A"
                     print(f"  {YELLOW}->{RESET} {listing['title']} | {price_str} | {listing['location']}")
 
                     model = None
@@ -244,14 +252,11 @@ async def scan_loop(client: discord.Client, config: dict, channel_cfg: dict, see
 
                     # mark seen + record price only after a successful send, so a
                     # transient Discord failure retries on the next scan without
-                    # double-recording the price
-                    if await _send_and_mark(channel, listing, seen_ids):
-                        sent_any = True
+                    # double-recording the price. The SeenWriter's debounce timer
+                    # handles the disk write; no per-cycle save_seen needed.
+                    if await _send_and_mark(seen_writer, channel, listing):
                         if model:
                             record_price(model, listing["price"])
-
-                if sent_any:
-                    save_seen(seen_ids, ttl_days=config.get("seen_ttl_days", DEFAULT_SEEN_TTL_DAYS))
 
         except Exception as e:
             await SPINNER.pause()
@@ -310,7 +315,18 @@ def main():
         except Exception as exc:
             print(f"{BOLD}{YELLOW}[{t('warn.banner_prefix')}]{RESET} " + t("boot.commands_sync_failed", exc=exc))
 
-        seen_ids = load_seen(ttl_days=config.get("seen_ttl_days", DEFAULT_SEEN_TTL_DAYS))
+        # SeenWriter: in-memory dedup with debounced disk flush. Loaded from
+        # disk at construction, so the in-memory set is already populated
+        # before any channel loop runs. The flush loop is started here and
+        # stopped in on_close (graceful shutdown) so a SIGINT never loses
+        # more than DEFAULT_SEEN_FLUSH_SECONDS of newly-seen IDs.
+        seen_writer = SeenWriter(
+            ttl_days=config.get("seen_ttl_days", DEFAULT_SEEN_TTL_DAYS),
+        )
+        seen_writer.start()
+        # Attach the writer to the client so on_close can find and stop it.
+        client._seen_writer = seen_writer  # type: ignore[attr-defined]
+
         stats_channel_id = config.get("stats_channel_id")
         stats_msg = await stats_init(client, stats_channel_id)
         asyncio.create_task(midnight_restart())
@@ -318,7 +334,7 @@ def main():
         backfill_days = config.get("backfill_days", 0)
         if backfill_days > 0:
             for channel_cfg in config["channels"]:
-                await backfill_channel(client, config, channel_cfg, seen_ids, backfill_days)
+                await backfill_channel(client, config, channel_cfg, seen_writer, backfill_days)
             try:
                 reset_backfill_days()
                 print(f"{DARK_GRAY}[{YELLOW}{t('backfill.banner_prefix')}{DARK_GRAY}]{RESET} {GREEN}" + t("backfill.complete") + f"{RESET}")
@@ -326,13 +342,23 @@ def main():
                 print(f"{BOLD}{YELLOW}[{t('warn.banner_prefix')}]{RESET} " + t("backfill.reset_failed", exc=exc))
 
         for channel_cfg in config["channels"]:
-            asyncio.create_task(scan_loop(client, config, channel_cfg, seen_ids))
+            asyncio.create_task(scan_loop(client, config, channel_cfg, seen_writer))
         if stats_msg:
             asyncio.create_task(stats_loop(client, stats_channel_id, stats_msg))
 
         archive_channel_ids = [int(ch["channel_id"]) for ch in config["channels"]]
         archive_interval = config.get("auto_archive_interval_minutes", 30)
         asyncio.create_task(auto_archive_loop(client, archive_channel_ids, archive_interval))
+
+    @client.event
+    async def on_close() -> None:
+        # Graceful shutdown: flush any pending seen-ID writes to disk so a
+        # clean stop doesn't lose IDs that haven't hit the debounce timer yet.
+        # The KeyError guard handles a close that races with a failed on_ready
+        # (e.g. commands_sync_failed before the writer was attached).
+        writer = getattr(client, "_seen_writer", None)
+        if writer is not None:
+            await writer.stop()
 
     @client.event
     async def on_raw_reaction_add(payload: discord.RawReactionActionEvent) -> None:
@@ -349,7 +375,7 @@ def main():
     try:
         client.run(bot_token)
     except KeyboardInterrupt:
-        # seen.json is already saved after every scan that finds something new
+        # on_close has already flushed the SeenWriter; nothing else to do.
         print(f"\n{CYAN}[{t('stop.banner_prefix')}]{RESET} " + t("stop.scanner_stopped"))
         sys.exit(0)
 
