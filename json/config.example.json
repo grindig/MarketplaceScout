@@ -1,5 +1,6 @@
 {
   "scan_interval_seconds": 60,
+  "seen_ttl_days": 52,
   "language": "en",
   "backfill_days": 0,
   "auto_archive_interval_minutes": 30,
