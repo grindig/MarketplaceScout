@@ -44,6 +44,7 @@
   "scan.new_hits": "#{channel} SCAN #{n}: {m} new hits!",
   "scan.scan_failed": "#{channel} Scan #{n} failed: {e}",
   "scan.banner_prefix": "SCAN",
+  "scanner.backfill_page_failed": "Backfill: page {page} could not be loaded: {exc}",
   "warn.banner_prefix": "WARN",
   "error.banner_prefix": "ERROR",
   "backfill.fetching": "#{channel}: fetching last {days} days...",
