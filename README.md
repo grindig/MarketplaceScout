@@ -113,6 +113,7 @@ Copy `json/config.example.json` → `json/config.json` and fill in your channel 
 | Key | Description |
 |---|---|
 | `scan_interval_seconds` | Seconds between scans (default `60`) |
+| `seen_ttl_days` | Days to remember seen listing IDs (default `52`). Older IDs are pruned on load/save. |
 | `language` | UI language: `en` (default) or `de`. Requires a restart to apply. |
 | `auto_archive_interval_minutes` | How often the auto-archiver checks for >24h-old listings (default `30`) |
 | `backfill_days` | On startup, fetch the last *N* days (`0` = off — auto-reset to `0` once done) |
