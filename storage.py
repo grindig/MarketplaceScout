@@ -3,6 +3,7 @@
 import json
 import os
 import time
+from datetime import datetime, timedelta, timezone
 
 from i18n import t
 
@@ -17,6 +18,26 @@ SEEN_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "json", "se
 # still surface instead of hanging.
 _ATOMIC_RETRY_ATTEMPTS = 10
 _ATOMIC_RETRY_INITIAL_SLEEP_S = 0.005  # 5 ms
+
+# How many days to remember seen listing IDs. Willhaben listings expire and
+# are not reposted with the same ID, so a bounded window keeps the state file
+# from growing forever without losing meaningful dedup coverage.
+DEFAULT_SEEN_TTL_DAYS = 52
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _parse_iso(ts: str) -> datetime:
+    dt = datetime.fromisoformat(ts)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+def _cutoff(ttl_days: int) -> datetime:
+    return datetime.now(timezone.utc) - timedelta(days=ttl_days)
 
 
 def atomic_write_json(path: str, data) -> None:
@@ -46,18 +67,70 @@ def atomic_write_json(path: str, data) -> None:
             delay *= 2
 
 
-def load_seen(path: str = SEEN_PATH) -> set[str]:
-    """Load the set of seen listing IDs. Returns an empty set if missing or unreadable."""
+def load_seen(path: str = SEEN_PATH, ttl_days: int = DEFAULT_SEEN_TTL_DAYS) -> set[str]:
+    """Load the set of seen listing IDs, pruning entries older than ``ttl_days``.
+
+    Returns an empty set if the file is missing or unreadable. Automatically
+    migrates the legacy list format by treating every existing ID as seen at
+    load time; the next save will rewrite it as a timestamped dict.
+    """
     if not os.path.exists(path):
         return set()
     try:
         with open(path, "r", encoding="utf-8") as f:
-            return set(json.load(f))
+            data = json.load(f)
     except (json.JSONDecodeError, OSError):
         print(f"[{t('warn.banner_prefix')}] " + t("storage.seen_corrupt"))
         return set()
 
+    if isinstance(data, list):
+        # Legacy format: migrate in-memory; next save writes as a dict.
+        return set(data)
 
-def save_seen(seen_ids: set[str], path: str = SEEN_PATH) -> None:
-    """Write the seen IDs atomically so a crash can't corrupt them."""
-    atomic_write_json(path, sorted(seen_ids))
+    if not isinstance(data, dict):
+        print(f"[{t('warn.banner_prefix')}] " + t("storage.seen_corrupt"))
+        return set()
+
+    cutoff = _cutoff(ttl_days)
+    return {
+        item_id for item_id, ts in data.items()
+        if _parse_iso(ts) >= cutoff
+    }
+
+
+def save_seen(
+    seen_ids: set[str],
+    path: str = SEEN_PATH,
+    ttl_days: int = DEFAULT_SEEN_TTL_DAYS,
+) -> None:
+    """Write the seen IDs atomically with first-seen timestamps, pruning old entries.
+
+    Preserves timestamps for IDs already on disk so the TTL window reflects
+    when the ID was first encountered, not last saved.
+    """
+    now = _now_iso()
+    cutoff = _cutoff(ttl_days)
+
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                existing = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            existing = {}
+    else:
+        existing = {}
+
+    if isinstance(existing, list):
+        existing = {item_id: now for item_id in existing}
+    elif not isinstance(existing, dict):
+        existing = {}
+
+    # Keep existing timestamps for IDs still within the TTL window.
+    data = {item_id: ts for item_id, ts in existing.items() if _parse_iso(ts) >= cutoff}
+
+    # Add any brand-new IDs.
+    for item_id in seen_ids:
+        if item_id not in data:
+            data[item_id] = now
+
+    atomic_write_json(path, data)
