@@ -165,11 +165,7 @@ Both default to requiring **Manage Messages** (tweak per server under *Server Se
 | `/clear [days] [hours] [minutes]` | Delete all bot notifications from the last *d*/*h*/*m* in this channel (all optional, ≥1 required) |
 | `/archive [days] [hours] [minutes]` | Move all bot notifications from the last *d*/*h*/*m* to the archive thread (all optional, ≥1 required) |
 
-### ⌨️ Hotkey
-
-`Ctrl+R` restarts the bot. **Heads up:** the `keyboard` module hooks the key *system-wide*, not just in the bot's terminal — pressing Ctrl+R anywhere (e.g. refreshing a browser tab) triggers a restart. It's optional, needs OS-level permissions (root on Linux), and is skipped if unavailable. Remove `keyboard` from `requirements.txt` to disable it entirely.
-
----
+The bot also restarts itself nightly at midnight to stay fresh. To restart manually, stop the process (`Ctrl+C`) and run `python main.py` again.
 
 ## Languages
 
