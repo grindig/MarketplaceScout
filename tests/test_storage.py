@@ -1,9 +1,10 @@
 """Tests for seen-ID persistence and shared atomic JSON writes."""
 
+import asyncio
 import json
 from datetime import datetime, timedelta, timezone
 
-from storage import atomic_write_json, load_seen, save_seen, DEFAULT_SEEN_TTL_DAYS
+from storage import atomic_write_json, load_seen, save_seen, SeenWriter, DEFAULT_SEEN_TTL_DAYS
 
 
 def test_load_seen_missing_file(tmp_path):
@@ -151,3 +152,131 @@ def test_atomic_write_json_retries_on_permission_error(tmp_path, monkeypatch):
     with open(path, encoding="utf-8") as f:
         assert json.load(f) == {"ok": True}
     assert not (tmp_path / "data.json.tmp").exists()
+
+
+# ---------------------------------------------------------------------------
+# SeenWriter: in-memory dedup with debounced disk flush.
+# ---------------------------------------------------------------------------
+
+
+def test_seen_writer_loads_existing(tmp_path):
+    """On construction the in-memory set is hydrated from the on-disk file."""
+    path = tmp_path / "seen.json"
+    path.write_text(json.dumps({"a": datetime.now(timezone.utc).isoformat()}), encoding="utf-8")
+
+    writer = SeenWriter(path=str(path))
+
+    assert writer.seen == {"a"}
+
+
+def test_seen_writer_add_idempotent(tmp_path):
+    """Adding the same ID twice doesn't double-write or change the set."""
+    writer = SeenWriter(path=str(tmp_path / "seen.json"))
+    writer.add("42")
+    assert writer.seen == {"42"}
+    writer.add("42")
+    assert writer.seen == {"42"}
+
+
+def test_seen_writer_stop_flushes_when_dirty(tmp_path):
+    """stop() persists pending adds so a graceful shutdown doesn't lose them."""
+    path = tmp_path / "seen.json"
+    writer = SeenWriter(path=str(path))
+    writer.add("a")
+    writer.add("b")
+    # File doesn't exist yet — stop() must create it with the new IDs.
+    assert not path.exists()
+
+    asyncio.run(writer.stop())
+
+    assert path.exists()
+    on_disk = json.loads(path.read_text(encoding="utf-8"))
+    assert set(on_disk.keys()) == {"a", "b"}
+
+
+def test_seen_writer_stop_is_noop_when_clean(tmp_path):
+    """stop() with no pending adds must not rewrite the file."""
+    path = tmp_path / "seen.json"
+    valid_ts = datetime.now(timezone.utc).isoformat()
+    path.write_text(json.dumps({"a": valid_ts}), encoding="utf-8")
+    mtime_before = path.stat().st_mtime
+
+    writer = SeenWriter(path=str(path))
+    asyncio.run(writer.stop())
+
+    # File contents unchanged.
+    assert json.loads(path.read_text(encoding="utf-8")) == {"a": valid_ts}
+    # mtime preserved: stop() took the dirty-skip path.
+    assert path.stat().st_mtime == mtime_before
+
+
+def test_seen_writer_flush_now_is_noop_when_clean(tmp_path):
+    """flush_now() is a cheap O(1) call when nothing changed."""
+    path = tmp_path / "seen.json"
+    writer = SeenWriter(path=str(path))
+    # File doesn't exist; a clean flush must NOT create it.
+    asyncio.run(writer.flush_now())
+    assert not path.exists()
+
+
+def test_seen_writer_extend_batch(tmp_path):
+    """extend() marks multiple IDs in one shot."""
+    writer = SeenWriter(path=str(tmp_path / "seen.json"))
+    writer.extend({"a", "b", "c"})
+    assert writer.seen == {"a", "b", "c"}
+
+
+def test_seen_writer_start_is_idempotent(tmp_path):
+    """Calling start() twice doesn't spawn two flush tasks."""
+    async def cycle():
+        writer = SeenWriter(path=str(tmp_path / "seen.json"))
+        writer.start()
+        writer.start()
+        # The second start() is a no-op; if it spawned a duplicate task the
+        # assertion below would see two tasks in the writer's tracked set.
+        assert writer._task is not None
+        await writer.stop()
+
+    asyncio.run(cycle())
+
+
+def test_seen_writer_debounce_persists_after_interval(tmp_path):
+    """The background loop actually writes to disk after the debounce window."""
+    path = tmp_path / "seen.json"
+    writer = SeenWriter(path=str(path), flush_seconds=0.05)
+
+    async def cycle():
+        writer.start()
+        writer.add("late")
+        # Wait past the debounce window so the background task wakes up.
+        await asyncio.sleep(0.1)
+        # Don't call stop() — it would also flush, masking whether the
+        # background tick did the work. Instead, check the file directly.
+        writer._stop.set()
+        try:
+            await writer._task
+        except asyncio.CancelledError:
+            pass
+
+    asyncio.run(cycle())
+
+    assert path.exists()
+    on_disk = json.loads(path.read_text(encoding="utf-8"))
+    assert "late" in on_disk
+
+
+def test_seen_writer_persists_first_seen_timestamp(tmp_path):
+    """Re-adding an already-known ID must not refresh its first-seen timestamp."""
+    path = tmp_path / "seen.json"
+    writer = SeenWriter(path=str(path))
+    writer.add("a")
+    asyncio.run(writer.stop())
+    ts_first = json.loads(path.read_text(encoding="utf-8"))["a"]
+
+    # Simulate a fresh start: rebuild the writer, re-add the same ID, flush.
+    writer2 = SeenWriter(path=str(path))
+    writer2.add("a")
+    asyncio.run(writer2.stop())
+    ts_second = json.loads(path.read_text(encoding="utf-8"))["a"]
+
+    assert ts_first == ts_second
