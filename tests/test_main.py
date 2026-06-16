@@ -135,7 +135,7 @@ def test_scan_loop_sends_listing_when_historical_average_is_zero(monkeypatch):
     monkeypatch.setattr(main, "scan_once", lambda cfg: [listing])
     monkeypatch.setattr(main, "find_gpu_model", lambda title, models: "RTX 3060")
     monkeypatch.setattr(main, "get_stats", lambda model: {"avg": 0.0, "count": 2})
-    monkeypatch.setattr(main, "save_seen", lambda seen: None)
+    monkeypatch.setattr(main, "save_seen", lambda seen, **kwargs: None)
 
     recorded: list[tuple[str, float]] = []
     monkeypatch.setattr(main, "record_price", lambda model, price: recorded.append((model, price)))
