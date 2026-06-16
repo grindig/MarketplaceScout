@@ -38,7 +38,7 @@ async def _archive_to_thread(messages: list[discord.Message], archive_thread: di
             await msg.delete()
             archived += 1
         except Exception as exc:
-            print(f"{BOLD}{YELLOW}[WARN]{RESET} Archive: msg {msg.id}: {exc}")
+            print(f"{BOLD}{YELLOW}[{t('warn.banner_prefix')}]{RESET} " + t("archive.msg_failed", id=msg.id, exc=exc))
     return archived
 
 
