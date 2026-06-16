@@ -19,7 +19,7 @@ from marker import mark_message
 from colors import RESET, BOLD, DIM, RED, YELLOW, CYAN, GREEN, DARK_GRAY, LIGHT_GRAY
 from price_tracker import find_gpu_model, record_price, get_stats
 from stats_board import stats_init, stats_loop
-from storage import atomic_write_json, load_seen, save_seen
+from storage import atomic_write_json, load_seen, save_seen, DEFAULT_SEEN_TTL_DAYS
 
 BOT_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(BOT_DIR, "json", "config.json")
@@ -173,7 +173,7 @@ async def backfill_channel(
         await _send_and_mark(channel, listing, seen_ids, mention=False)
         await asyncio.sleep(0.5)  # Discord rate limit
 
-    save_seen(seen_ids)
+    save_seen(seen_ids, ttl_days=config.get("seen_ttl_days", DEFAULT_SEEN_TTL_DAYS))
     print(f"{DARK_GRAY}[{YELLOW}{t('backfill.banner_prefix')}{DARK_GRAY}]{RESET} " + t("backfill.done", channel=channel.name))
 
 
@@ -251,7 +251,7 @@ async def scan_loop(client: discord.Client, config: dict, channel_cfg: dict, see
                             record_price(model, listing["price"])
 
                 if sent_any:
-                    save_seen(seen_ids)
+                    save_seen(seen_ids, ttl_days=config.get("seen_ttl_days", DEFAULT_SEEN_TTL_DAYS))
 
         except Exception as e:
             await SPINNER.pause()
@@ -310,7 +310,7 @@ def main():
         except Exception as exc:
             print(f"{BOLD}{YELLOW}[{t('warn.banner_prefix')}]{RESET} " + t("boot.commands_sync_failed", exc=exc))
 
-        seen_ids = load_seen()
+        seen_ids = load_seen(ttl_days=config.get("seen_ttl_days", DEFAULT_SEEN_TTL_DAYS))
         stats_channel_id = config.get("stats_channel_id")
         stats_msg = await stats_init(client, stats_channel_id)
         asyncio.create_task(midnight_restart())
