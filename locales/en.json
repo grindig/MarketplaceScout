@@ -21,7 +21,6 @@
   "command.archive.name": "archive",
   "command.archive.description": "Archives bot notifications in the given time window in this channel.",
   "command.archive.reply.no_messages": "No bot messages found in the time window.",
-  "command.archive.reply.error_loading": "Error loading messages: {exc}",
   "command.archive.reply.thread_error": "Could not open archive thread: {exc}",
   "command.archive.reply.archived": "{n} messages archived.",
   "command.archive.reply.archived_log": "#{channel}: {n}/{m} archived ({label}).",
