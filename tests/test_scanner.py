@@ -247,6 +247,27 @@ def test_fetch_listings_since_keeps_undated_listings(monkeypatch):
     assert [l["id"] for l in result] == ["undated", "fresh"]
 
 
+def test_fetch_listings_since_logs_translated_error_on_page_failure(monkeypatch, capsys):
+    """A failing page must log via t() so the message is translated, not a hardcoded literal."""
+    def boom(_url):
+        raise RuntimeError("connection reset")
+
+    monkeypatch.setattr(scanner, "fetch_html", boom)
+
+    from i18n import set_language
+    set_language("en")
+    fetch_listings_since("https://example.test/search", days_back=2)
+    captured = capsys.readouterr()
+    assert "could not be loaded" in captured.out
+    assert "Seite" not in captured.out  # the old hardcoded German is gone
+
+    set_language("de")
+    fetch_listings_since("https://example.test/search", days_back=2)
+    captured = capsys.readouterr()
+    assert "Seite" in captured.out
+    set_language("en")
+
+
 # ---------------------------------------------------------------------------
 # per-thread sessions
 # ---------------------------------------------------------------------------
