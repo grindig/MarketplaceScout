@@ -6,6 +6,7 @@ import json
 import pytest
 
 import main
+from storage import SeenWriter
 
 
 def test_reset_backfill_days(tmp_path, monkeypatch):
@@ -87,7 +88,7 @@ class _FakeClient:
         return self._channel
 
 
-def test_scan_loop_skips_listing_already_seen(monkeypatch):
+def test_scan_loop_skips_listing_already_seen(tmp_path, monkeypatch):
     """A listing another channel already marked seen mid-cycle is not re-sent."""
     listing = {"id": "99", "title": "RTX 3080", "price": 100.0, "url": "", "location": ""}
 
@@ -106,13 +107,14 @@ def test_scan_loop_skips_listing_already_seen(monkeypatch):
 
     monkeypatch.setattr(main, "send_notification", fake_send)
 
-    seen = {"99"}
+    seen_writer = SeenWriter(path=str(tmp_path / "seen.json"))
+    seen_writer.extend({"99"})
     config = {"keywords": ["RTX"], "scan_interval_seconds": 3600}
     channel_cfg = {"channel_id": "1", "max_price": None, "search_urls": ["u1"]}
 
     async def drive():
         task = asyncio.create_task(
-            main.scan_loop(_FakeClient(_FakeChannel()), config, channel_cfg, seen)
+            main.scan_loop(_FakeClient(_FakeChannel()), config, channel_cfg, seen_writer)
         )
         # let it run one scan, then it parks on the interval sleep; cancel it
         for _ in range(20):
@@ -128,14 +130,15 @@ def test_scan_loop_skips_listing_already_seen(monkeypatch):
     assert sends == []  # already-seen listing was skipped, never sent
 
 
-def test_scan_loop_sends_listing_when_historical_average_is_zero(monkeypatch):
+def test_scan_loop_sends_listing_when_historical_average_is_zero(tmp_path, monkeypatch):
     """A zero price-history average must not abort delivery of the listing."""
     listing = {"id": "42", "title": "RTX 3060", "price": 100.0, "url": "", "location": ""}
 
     monkeypatch.setattr(main, "scan_once", lambda cfg: [listing])
     monkeypatch.setattr(main, "find_gpu_model", lambda title, models: "RTX 3060")
     monkeypatch.setattr(main, "get_stats", lambda model: {"avg": 0.0, "count": 2})
-    monkeypatch.setattr(main, "save_seen", lambda seen, **kwargs: None)
+    # Stub SeenWriter.flush_now so no disk I/O happens in this test.
+    monkeypatch.setattr(SeenWriter, "flush_now", _async_noop)
 
     recorded: list[tuple[str, float]] = []
     monkeypatch.setattr(main, "record_price", lambda model, price: recorded.append((model, price)))
@@ -148,7 +151,7 @@ def test_scan_loop_sends_listing_when_historical_average_is_zero(monkeypatch):
 
     monkeypatch.setattr(main, "send_notification", fake_send)
 
-    seen: set[str] = set()
+    seen_writer = SeenWriter(path=str(tmp_path / "seen.json"))
     config = {"keywords": ["RTX"], "scan_interval_seconds": 3600, "gpu_models": ["RTX 3060"]}
     channel_cfg = {
         "channel_id": "1",
@@ -160,7 +163,7 @@ def test_scan_loop_sends_listing_when_historical_average_is_zero(monkeypatch):
 
     async def drive():
         task = asyncio.create_task(
-            main.scan_loop(_FakeClient(_FakeChannel()), config, channel_cfg, seen)
+            main.scan_loop(_FakeClient(_FakeChannel()), config, channel_cfg, seen_writer)
         )
         for _ in range(20):
             await asyncio.sleep(0)
@@ -175,7 +178,7 @@ def test_scan_loop_sends_listing_when_historical_average_is_zero(monkeypatch):
     assert [s["id"] for s in sends] == ["42"]
     assert "price_stats" not in sends[0]
     assert recorded == [("RTX 3060", 100.0)]
-    assert seen == {"42"}
+    assert seen_writer.seen == {"42"}
 
 
 def _make_send_stub(result: bool, calls: list):
@@ -185,28 +188,32 @@ def _make_send_stub(result: bool, calls: list):
     return stub
 
 
-def test_send_and_mark_adds_seen_on_success(monkeypatch):
+async def _async_noop(*args, **kwargs):
+    return None
+
+
+def test_send_and_mark_adds_seen_on_success(tmp_path, monkeypatch):
     calls: list = []
     monkeypatch.setattr(main, "send_notification", _make_send_stub(True, calls))
-    seen: set[str] = set()
+    seen_writer = SeenWriter(path=str(tmp_path / "seen.json"))
 
-    ok = asyncio.run(main._send_and_mark("channel", {"id": "42"}, seen))
+    ok = asyncio.run(main._send_and_mark(seen_writer, "channel", {"id": "42"}))
 
     assert ok is True
-    assert seen == {"42"}
+    assert seen_writer.seen == {"42"}
     assert calls == [("42", True)]
 
 
-def test_send_and_mark_keeps_unseen_on_failure(monkeypatch):
+def test_send_and_mark_keeps_unseen_on_failure(tmp_path, monkeypatch):
     """A failed send must leave the listing unseen so the next scan retries it."""
     calls: list = []
     monkeypatch.setattr(main, "send_notification", _make_send_stub(False, calls))
-    seen: set[str] = set()
+    seen_writer = SeenWriter(path=str(tmp_path / "seen.json"))
 
-    ok = asyncio.run(main._send_and_mark("channel", {"id": "42"}, seen, mention=False))
+    ok = asyncio.run(main._send_and_mark(seen_writer, "channel", {"id": "42"}, mention=False))
 
     assert ok is False
-    assert seen == set()
+    assert seen_writer.seen == set()
     assert calls == [("42", False)]
 
 def test_load_config_defaults_to_english(tmp_path, monkeypatch):
