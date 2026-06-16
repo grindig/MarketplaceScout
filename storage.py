@@ -1,5 +1,6 @@
 """Persistence for seen listing IDs and shared atomic JSON writes."""
 
+import asyncio
 import json
 import os
 import time
@@ -134,3 +135,120 @@ def save_seen(
             data[item_id] = now
 
     atomic_write_json(path, data)
+
+
+# Default debounce window for the in-memory seen-ID writer. Long enough that
+# back-to-back scans within the same minute coalesce into one disk write,
+# short enough that an unclean shutdown loses at most a few listings (which
+# re-notify on next start, with no @here ping because they re-hit the in-memory
+# filter_new check on the very next cycle anyway).
+DEFAULT_SEEN_FLUSH_SECONDS = 300
+
+
+class SeenWriter:
+    """In-memory seen-ID store with debounced background flush.
+
+    Why this exists: ``save_seen`` does a read-merge-write of the whole
+    ``seen.json`` file, and the previous code called it after *every* scan
+    cycle that found anything. With multiple channels and a 60 s interval,
+    that's a few rewrites/minute of a file that grows to thousands of IDs —
+    each rewrite does a full JSON parse + serialize + ``os.replace`` (which
+    on Windows can hit the PermissionError-retry tail of ``atomic_write_json``,
+    with a worst-case backoff of ~2.5 s on the event loop). The merge work
+    is O(N) in the seen-set size every cycle even when nothing changed.
+
+    The SeenWriter keeps the seen set purely in memory and flushes to disk
+    on a debounce timer, on graceful shutdown, or on demand. The in-memory
+    set is the dedup source of truth at runtime; the on-disk file is a
+    cold-start cache. A crash loses at most ``DEFAULT_SEEN_FLUSH_SECONDS``
+    worth of new IDs, and the next scan's ``filter_new`` re-checks the
+    in-memory set before sending, so a re-notification is impossible within
+    a single process lifetime — only across a restart.
+
+    Thread/coroutine model: ``add`` may be called from the event loop or from
+    worker threads (the scan loop runs ``scan_once`` inside ``asyncio.to_thread``).
+    The set mutations are tiny and Python's GIL makes single ``set.add`` calls
+    effectively atomic; the flush loop lives on the event loop, so it never
+    races with itself.
+    """
+
+    def __init__(
+        self,
+        path: str = SEEN_PATH,
+        ttl_days: int = DEFAULT_SEEN_TTL_DAYS,
+        flush_seconds: float = DEFAULT_SEEN_FLUSH_SECONDS,
+    ) -> None:
+        self._path = path
+        self._ttl_days = ttl_days
+        self._flush_seconds = flush_seconds
+        # Loaded from disk at construction so the in-memory set is the
+        # dedup source of truth from the very first filter_new call.
+        self._seen: set[str] = load_seen(path, ttl_days=ttl_days)
+        self._dirty = False
+        self._task: asyncio.Task | None = None
+        self._stop: asyncio.Event | None = None
+
+    @property
+    def seen(self) -> set[str]:
+        """The live in-memory seen set. Callers must not mutate it directly;
+        use :meth:`add` so the dirty flag is set and the flush is scheduled."""
+        return self._seen
+
+    def add(self, item_id: str) -> None:
+        """Record an item as seen. O(1); safe to call from any thread."""
+        if item_id in self._seen:
+            return
+        self._seen.add(item_id)
+        self._dirty = True
+
+    def extend(self, item_ids) -> None:
+        """Record a batch of IDs in one shot."""
+        for item_id in item_ids:
+            if item_id not in self._seen:
+                self._seen.add(item_id)
+                self._dirty = True
+
+    def start(self) -> None:
+        """Start the background flush loop. Idempotent."""
+        if self._task is not None and not self._task.done():
+            return
+        self._stop = asyncio.Event()
+        self._task = asyncio.create_task(self._run(self._stop))
+
+    async def stop(self) -> None:
+        """Stop the flush loop and write any pending changes to disk.
+
+        Always safe to call, even if ``start`` was never called — the
+        post-stop flush is a no-op when nothing is dirty.
+        """
+        if self._task is not None:
+            self._stop.set()
+            try:
+                await self._task
+            except asyncio.CancelledError:
+                pass
+            self._task = None
+        await self.flush_now()
+
+    async def flush_now(self) -> None:
+        """Force a synchronous write if anything is dirty. Cheap no-op otherwise."""
+        if not self._dirty:
+            return
+        save_seen(self._seen, self._path, ttl_days=self._ttl_days)
+        self._dirty = False
+
+    async def _run(self, stop: asyncio.Event) -> None:
+        while not stop.is_set():
+            # Sleep in short slices so ``stop`` is responsive even when
+            # flush_seconds is large.
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=self._flush_seconds)
+                return  # stop was set
+            except asyncio.TimeoutError:
+                pass
+            try:
+                await self.flush_now()
+            except Exception as exc:
+                # Don't let one bad write kill the flush loop — the next
+                # tick will retry. Surface it as a warning.
+                print(f"[{t('warn.banner_prefix')}] " + t("storage.seen_flush_failed", exc=exc))
