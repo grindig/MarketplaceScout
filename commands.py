@@ -10,28 +10,24 @@ from colors import RESET, BOLD, YELLOW, MAGENTA, CYAN
 from i18n import t
 
 
-async def _bot_messages_in_window(
+async def _archive_window_to_thread(
     channel: discord.TextChannel,
+    archive_thread: discord.Thread,
     client: discord.Client,
     window: timedelta,
-) -> list[discord.Message]:
-    """Bot messages within the window, oldest first (history defaults to
-    oldest-first when ``after`` is given)."""
-    after = datetime.now(timezone.utc) - window
-    msgs: list[discord.Message] = []
-    async for msg in channel.history(limit=None, after=after):
-        if msg.author.id == client.user.id:
-            msgs.append(msg)
-    return msgs
+) -> int:
+    """Stream bot messages from ``channel`` to ``archive_thread`` oldest-first.
 
-
-async def _archive_to_thread(messages: list[discord.Message], archive_thread: discord.Thread) -> int:
-    """Forward messages (already oldest-first) to the archive thread and delete the originals.
-
-    Returns the number of successfully archived messages; failures are logged and skipped.
+    Messages are processed one at a time instead of buffered into a list, so
+    the memory footprint stays flat even for very large time windows. Returns
+    the number of successfully archived messages; failures are logged and
+    skipped.
     """
+    after = datetime.now(timezone.utc) - window
     archived = 0
-    for msg in messages:
+    async for msg in channel.history(limit=None, after=after):
+        if msg.author.id != client.user.id:
+            continue
         try:
             if msg.embeds:  # empty embed list would raise on send
                 await archive_thread.send(embeds=msg.embeds)
@@ -137,26 +133,16 @@ def register_commands(client: discord.Client, tree: app_commands.CommandTree) ->
         await interaction.response.defer(ephemeral=True, thinking=True)
 
         try:
-            messages = await _bot_messages_in_window(channel, client, window)
-        except Exception as exc:
-            await interaction.followup.send(t("command.archive.reply.error_loading", exc=exc), ephemeral=True)
-            return
-
-        if not messages:
-            await interaction.followup.send(t("command.archive.reply.no_messages"), ephemeral=True)
-            return
-
-        try:
             archive_thread = await find_or_create_archive_thread(channel)
         except Exception as exc:
             await interaction.followup.send(t("command.archive.reply.thread_error", exc=exc), ephemeral=True)
             return
 
-        archived = await _archive_to_thread(messages, archive_thread)
+        archived = await _archive_window_to_thread(channel, archive_thread, client, window)
 
         label = _window_label(days, hours, minutes)
         print(
             f"{MAGENTA}[{t('command.archive.banner_prefix')}]{RESET} "
-            f"{t('command.archive.reply.archived_log', channel=channel.name, n=archived, m=len(messages), label=label)}"
+            f"{t('command.archive.reply.archived_log', channel=channel.name, n=archived, label=label)}"
         )
         await interaction.followup.send(t("command.archive.reply.archived", n=archived), ephemeral=True)
