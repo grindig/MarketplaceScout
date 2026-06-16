@@ -289,22 +289,8 @@ def main():
     # so the cache is never read — only memory.
     client = discord.Client(intents=intents, max_messages=None)
     tree = discord.app_commands.CommandTree(client)
+    # Register slash commands against the client.
     register_commands(client, tree)
-
-    # Ctrl+R restart hotkey — interactive runs only. `keyboard` installs a
-    # global system-wide hook (and needs root/accessibility on some systems), so
-    # skip it on a headless 24/7 deploy: midnight_restart + Ctrl+C already cover
-    # restart there, and a global hook would let Ctrl+R in any app (e.g. a browser
-    # refresh) restart the bot.
-    if sys.stdout.isatty():
-        try:
-            # imported lazily; the hotkey fires on a background thread, but
-            # os.execv must run on the main thread, so marshal the restart
-            # onto the event loop.
-            import keyboard
-            keyboard.add_hotkey("ctrl + r", lambda: client.loop.call_soon_threadsafe(restart))
-        except Exception:
-            pass
 
     started = False
 
