@@ -8,7 +8,7 @@ Built for one job: catch the underpriced and the broken-but-fixable **first**.
 
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![discord.py](https://img.shields.io/badge/discord.py-2.x-5865F2)
-![tests](https://img.shields.io/badge/tests-96%20passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-110%20passing-brightgreen)
 ![made in](https://img.shields.io/badge/made%20for-🇦🇹%20willhaben-red)
 
 ---
@@ -199,7 +199,7 @@ pip install pytest
 python -m pytest tests/
 ```
 
-68 tests covering parsing, the boundary-aware matcher, backfill pagination, dedup, and the price tracker.
+110 tests covering parsing, the boundary-aware matcher, backfill pagination, dedup, atomic writes, the price tracker, and the i18n layer.
 
 ---
 
