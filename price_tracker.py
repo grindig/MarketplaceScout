@@ -6,6 +6,7 @@ import re
 from typing import Optional
 
 from i18n import t
+from storage import atomic_write_json
 
 PRICES_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "json", "prices.json")
 
@@ -51,10 +52,7 @@ def _load(prices_path: str) -> dict:
 
 
 def _save(prices: dict, prices_path: str) -> None:
-    tmp = prices_path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(prices, f, indent=2)
-    os.replace(tmp, prices_path)
+    atomic_write_json(prices_path, prices)
 
 
 def record_price(model: str, price: float, prices_path: str = PRICES_PATH) -> None:
