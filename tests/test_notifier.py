@@ -117,6 +117,28 @@ def test_send_notification_returns_true_when_only_reactions_fail():
     assert result is True
 
 
+def test_send_notification_logs_translated_send_failure(capsys):
+    """A failed send must log via t() so the warning respects the configured language."""
+    from i18n import set_language
+    set_language("de")
+    asyncio.run(send_notification(FakeChannel(send_fails=True), make_listing()))
+    captured = capsys.readouterr()
+    assert "Discord-Notification" in captured.out
+    assert "Failed to send" not in captured.out  # the old hardcoded English is gone
+    set_language("en")
+
+
+def test_send_notification_logs_translated_react_failure(capsys):
+    """A failed reaction must log via t() so the warning respects the configured language."""
+    from i18n import set_language
+    set_language("de")
+    asyncio.run(send_notification(FakeChannel(react_fails=True), make_listing()))
+    captured = capsys.readouterr()
+    assert "Reactions" in captured.out
+    assert "Failed to add" not in captured.out  # the old hardcoded English is gone
+    set_language("en")
+
+
 def test_build_embed_thumbnail_set_when_image_url_present():
     listing = make_listing(image_url="https://cache.willhaben.at/mmo/x.jpg")
     embed = build_embed(listing)
