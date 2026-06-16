@@ -19,7 +19,7 @@ from marker import mark_message
 from colors import RESET, BOLD, DIM, RED, YELLOW, CYAN, GREEN, DARK_GRAY, LIGHT_GRAY
 from price_tracker import find_gpu_model, record_price, get_stats
 from stats_board import stats_init, stats_loop
-from storage import load_seen, save_seen
+from storage import atomic_write_json, load_seen, save_seen
 
 BOT_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(BOT_DIR, "json", "config.json")
@@ -56,10 +56,7 @@ def reset_backfill_days() -> None:
     with open(CONFIG_PATH, "r", encoding="utf-8") as f:
         raw = json.load(f)
     raw["backfill_days"] = 0
-    tmp = CONFIG_PATH + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(raw, f, indent=2, ensure_ascii=False)
-    os.replace(tmp, CONFIG_PATH)
+    atomic_write_json(CONFIG_PATH, raw)
 
 
 def scan_once(config: dict) -> list[dict]:
