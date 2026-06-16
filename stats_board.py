@@ -11,6 +11,7 @@ import discord
 from colors import CYAN, DARK_GRAY, LIGHT_GRAY, RESET
 from i18n import t
 from price_tracker import _load, PRICES_PATH
+from storage import atomic_write_json
 
 STATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "json", "stats_state.json")
 _TAG = f"{DARK_GRAY}[{CYAN}STATS{DARK_GRAY}]{RESET}"
@@ -34,10 +35,7 @@ def _load_state() -> dict:
 
 
 def _save_state(channel_id: str, message_id: int) -> None:
-    tmp = STATE_PATH + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump({"channel_id": channel_id, "message_id": message_id}, f)
-    os.replace(tmp, STATE_PATH)
+    atomic_write_json(STATE_PATH, {"channel_id": channel_id, "message_id": message_id})
 
 
 def _fmt(price: float) -> str:
