@@ -87,6 +87,7 @@
   "stats_board.field.no_data_value": "No data available yet",
   "stats_board.footer.last_updated": "Last updated: {datetime}",
   "storage.seen_corrupt": "seen.json could not be read, starting fresh.",
+  "storage.seen_flush_failed": "Could not flush seen.json, will retry on next cycle: {exc}",
   "price_tracker.prices_corrupt": "prices.json could not be read, starting fresh.",
   "command.clear.banner_prefix": "CLEAR",
   "command.archive.banner_prefix": "ARCHIVE"
