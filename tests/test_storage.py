@@ -1,8 +1,9 @@
 """Tests for seen-ID persistence and shared atomic JSON writes."""
 
 import json
+from datetime import datetime, timedelta, timezone
 
-from storage import atomic_write_json, load_seen, save_seen
+from storage import atomic_write_json, load_seen, save_seen, DEFAULT_SEEN_TTL_DAYS
 
 
 def test_load_seen_missing_file(tmp_path):
@@ -15,11 +16,15 @@ def test_roundtrip(tmp_path):
     assert load_seen(path) == {"1", "2", "3"}
 
 
-def test_save_is_sorted_json(tmp_path):
+def test_save_is_timestamped_json(tmp_path):
+    """seen.json is now a dict of id -> first_seen ISO timestamp."""
     path = str(tmp_path / "seen.json")
     save_seen({"b", "a"}, path)
     with open(path, encoding="utf-8") as f:
-        assert json.load(f) == ["a", "b"]
+        data = json.load(f)
+    assert set(data.keys()) == {"a", "b"}
+    for ts in data.values():
+        datetime.fromisoformat(ts)  # valid ISO timestamp
 
 
 def test_save_leaves_no_tmp_file(tmp_path):
@@ -34,10 +39,59 @@ def test_load_seen_corrupt_file(tmp_path):
     assert load_seen(str(path)) == set()
 
 
+def test_load_seen_migrates_legacy_list(tmp_path):
+    """The old flat list format is migrated to timestamped dict on first load."""
+    path = tmp_path / "seen.json"
+    path.write_text(json.dumps(["1", "2", "3"]), encoding="utf-8")
+    assert load_seen(str(path)) == {"1", "2", "3"}
+
+
+def test_load_seen_prunes_old_entries(tmp_path):
+    """IDs older than the TTL window are dropped on load."""
+    path = tmp_path / "seen.json"
+    old = (datetime.now(timezone.utc) - timedelta(days=60)).isoformat()
+    fresh = (datetime.now(timezone.utc) - timedelta(days=10)).isoformat()
+    path.write_text(json.dumps({"old": old, "fresh": fresh}), encoding="utf-8")
+    assert load_seen(str(path), ttl_days=52) == {"fresh"}
+
+
+def test_save_seen_preserves_first_seen_timestamp(tmp_path):
+    """Re-saving must not refresh the timestamp of an already-known ID."""
+    path = str(tmp_path / "seen.json")
+    save_seen({"a"}, path)
+    with open(path, encoding="utf-8") as f:
+        first_ts = json.load(f)["a"]
+    save_seen({"a", "b"}, path)
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    assert data["a"] == first_ts
+    assert data["b"] != first_ts
+
+
+def test_save_seen_prunes_old_entries(tmp_path):
+    """Saving drops IDs that crossed the TTL threshold."""
+    path = str(tmp_path / "seen.json")
+    old = (datetime.now(timezone.utc) - timedelta(days=60)).isoformat()
+    fresh = (datetime.now(timezone.utc) - timedelta(days=10)).isoformat()
+    save_seen(set(), path)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump({"old": old, "fresh": fresh}, f)
+    save_seen({"fresh"}, path, ttl_days=52)
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    assert "old" not in data
+    assert "fresh" in data
+
+
+def test_default_seen_ttl_is_52_days():
+    assert DEFAULT_SEEN_TTL_DAYS == 52
+
+
 # ---------------------------------------------------------------------------
 # atomic_write_json (shared by storage.save_seen, price_tracker._save,
 # stats_board._save_state, main.reset_backfill_days)
 # ---------------------------------------------------------------------------
+
 
 def test_atomic_write_json_roundtrips(tmp_path):
     path = str(tmp_path / "data.json")
