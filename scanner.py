@@ -14,6 +14,8 @@ from typing import Optional
 import requests
 from bs4 import BeautifulSoup, SoupStrainer
 
+from i18n import t
+
 HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -252,7 +254,7 @@ def fetch_listings_since(base_url: str, days_back: int, max_pages: int = 10) -> 
         try:
             html = fetch_html(url)
         except Exception as exc:
-            print(f"[WARN] Backfill: Seite {page} konnte nicht geladen werden: {exc}")
+            print(f"[{t('warn.banner_prefix')}] " + t("scanner.backfill_page_failed", page=page, exc=exc))
             break
 
         listings = parse_listings(html)
