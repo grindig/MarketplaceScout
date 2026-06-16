@@ -63,6 +63,7 @@
   "archive.fetch_failed": "Archive: could not fetch message {id}: {exc}",
   "archive.thread_failed": "Archive: could not find/create archive thread: {exc}",
   "archive.send_failed": "Archive: could not post to archive thread: {exc}",
+  "archive.msg_failed": "Archive: could not archive msg {id}: {exc}",
   "archive.message_archived": "Message {id} archived.",
   "archive.delete_failed": "Archive: could not delete original message {id}: {exc}",
   "auto_archive.thread_failed": "AutoArchive: archive thread failed for #{channel}: {exc}",
