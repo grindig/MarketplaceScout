@@ -73,13 +73,13 @@ async def send_notification(channel: discord.TextChannel, listing: dict, mention
             allowed_mentions=discord.AllowedMentions(everyone=mention),
         )
     except Exception as exc:
-        print(f"{BOLD}{YELLOW}[WARN]{RESET} Failed to send Discord notification: {exc}")
+        print(f"{BOLD}{YELLOW}[{t('warn.banner_prefix')}]{RESET} " + t("notifier.send_failed", exc=exc))
         return False
 
     try:
         await msg.add_reaction("✅")
         await msg.add_reaction("❌")
     except Exception as exc:
-        print(f"{BOLD}{YELLOW}[WARN]{RESET} Failed to add reactions: {exc}")
+        print(f"{BOLD}{YELLOW}[{t('warn.banner_prefix')}]{RESET} " + t("notifier.react_failed", exc=exc))
 
     return True
