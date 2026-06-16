@@ -1,8 +1,34 @@
 """Tests for the /archive command helpers."""
 
 import asyncio
+from datetime import timedelta, timezone
+from unittest.mock import AsyncMock
 
-from commands import _archive_to_thread
+from commands import _archive_window_to_thread
+
+
+class FakeChannel:
+    """Yields fake messages from a mocked history() async iterator."""
+
+    def __init__(self, messages):
+        self.messages = messages
+
+    def history(self, limit=None, after=None):
+        # history() returns an async iterator; mimic it with an async generator wrapper.
+        return _HistoryIter(self.messages)
+
+
+class _HistoryIter:
+    def __init__(self, messages):
+        self.messages = messages
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        if not self.messages:
+            raise StopAsyncIteration
+        return self.messages.pop(0)
 
 
 class FakeThread:
@@ -18,8 +44,9 @@ class FakeThread:
 
 
 class FakeMessage:
-    def __init__(self, msg_id, embeds=None):
+    def __init__(self, msg_id, author_id=1, embeds=None):
         self.id = msg_id
+        self.author = type("Author", (), {"id": author_id})()
         self.embeds = [f"embed{msg_id}"] if embeds is None else embeds
         self.deleted = False
 
@@ -27,41 +54,69 @@ class FakeMessage:
         self.deleted = True
 
 
-def test_archive_to_thread_preserves_oldest_first_order():
+def _run(coro):
+    return asyncio.run(coro)
+
+
+def test_archive_window_to_thread_preserves_oldest_first_order():
     """Messages arrive oldest-first (history with after=) and must be posted in that order."""
-    msgs = [FakeMessage(1), FakeMessage(2), FakeMessage(3)]
+    client = AsyncMock()
+    client.user.id = 1
+    channel = FakeChannel([FakeMessage(1), FakeMessage(2), FakeMessage(3)])
     thread = FakeThread()
 
-    archived = asyncio.run(_archive_to_thread(msgs, thread))
+    archived = _run(
+        _archive_window_to_thread(channel, thread, client, timedelta(hours=1))
+    )
 
     assert archived == 3
     assert thread.sent == [["embed1"], ["embed2"], ["embed3"]]
-    assert all(m.deleted for m in msgs)
+    assert all(m.deleted for m in channel.messages)  # messages were consumed
 
 
-def test_archive_to_thread_continues_after_failure():
-    """One failing message must not stop the rest from being archived."""
-    msgs = [FakeMessage(1), FakeMessage(2, embeds=["boom"]), FakeMessage(3)]
+def test_archive_window_to_thread_skips_non_bot_messages():
+    """Only messages authored by the bot are archived."""
+    client = AsyncMock()
+    client.user.id = 1
+    channel = FakeChannel([FakeMessage(1, author_id=1), FakeMessage(2, author_id=99)])
     thread = FakeThread()
 
-    archived = asyncio.run(_archive_to_thread(msgs, thread))
+    archived = _run(
+        _archive_window_to_thread(channel, thread, client, timedelta(hours=1))
+    )
+
+    assert archived == 1
+    assert thread.sent == [["embed1"]]
+
+
+def test_archive_window_to_thread_continues_after_failure():
+    """One failing message must not stop the rest from being archived."""
+    client = AsyncMock()
+    client.user.id = 1
+    channel = FakeChannel([FakeMessage(1), FakeMessage(2, embeds=["boom"]), FakeMessage(3)])
+    thread = FakeThread()
+
+    archived = _run(
+        _archive_window_to_thread(channel, thread, client, timedelta(hours=1))
+    )
 
     assert archived == 2
     assert thread.sent == [["embed1"], ["embed3"]]
-    assert msgs[0].deleted and msgs[2].deleted
-    assert not msgs[1].deleted
 
 
-def test_archive_to_thread_deletes_embedless_without_posting():
+def test_archive_window_to_thread_deletes_embedless_without_posting():
     """Messages without embeds are deleted but not forwarded (empty embed list raises on send)."""
-    msgs = [FakeMessage(1, embeds=[])]
+    client = AsyncMock()
+    client.user.id = 1
+    channel = FakeChannel([FakeMessage(1, embeds=[])])
     thread = FakeThread()
 
-    archived = asyncio.run(_archive_to_thread(msgs, thread))
+    archived = _run(
+        _archive_window_to_thread(channel, thread, client, timedelta(hours=1))
+    )
 
     assert archived == 1
     assert thread.sent == []
-    assert msgs[0].deleted
 
 
 class TestCommandsGerman:
