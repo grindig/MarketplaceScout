@@ -3,6 +3,7 @@
 import json
 import os
 import re
+import threading
 from typing import Optional
 
 from i18n import t
@@ -33,8 +34,24 @@ def find_gpu_model(title: str, gpu_models: list[str]) -> Optional[str]:
 
 
 # Write-through cache: the file is read once per path, then kept in memory.
-# All callers run on the event loop, so plain dict access is safe.
+# record_price runs inside asyncio.to_thread (one worker thread per channel
+# scan loop), so the read/mutate/write on this cache can race. _lock_for
+# serializes that critical section per price file.
 _cache: dict[str, dict] = {}
+
+_locks_guard = threading.Lock()
+_locks: dict[str, threading.Lock] = {}
+
+
+def _lock_for(path: str) -> threading.Lock:
+    """Return a per-absolute-path lock, creating it on first use."""
+    path = os.path.abspath(path)
+    with _locks_guard:
+        lock = _locks.get(path)
+        if lock is None:
+            lock = threading.Lock()
+            _locks[path] = lock
+        return lock
 
 
 def _load(prices_path: str) -> dict:
@@ -57,11 +74,12 @@ def _save(prices: dict, prices_path: str) -> None:
 
 def record_price(model: str, price: float, prices_path: str = PRICES_PATH) -> None:
     """Append a price entry for the given GPU model, keeping the last MAX_HISTORY."""
-    prices = _load(prices_path)
-    history = prices.setdefault(model, [])
-    history.append(price)
-    prices[model] = history[-MAX_HISTORY:]
-    _save(prices, prices_path)
+    with _lock_for(prices_path):
+        prices = _load(prices_path)
+        history = prices.setdefault(model, [])
+        history.append(price)
+        prices[model] = history[-MAX_HISTORY:]
+        _save(prices, prices_path)
 
 
 def get_stats(model: str, prices_path: str = PRICES_PATH) -> Optional[dict]:
