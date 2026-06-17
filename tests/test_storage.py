@@ -154,6 +154,24 @@ def test_atomic_write_json_retries_on_permission_error(tmp_path, monkeypatch):
     assert not (tmp_path / "data.json.tmp").exists()
 
 
+def test_atomic_write_json_concurrent_writes_leave_valid_json(tmp_path):
+    """Concurrent writers to the same path must not corrupt the file or leak
+    temp files. Each call used to share the fixed ``path + ".tmp"`` name, so
+    two simultaneous writes could clobber each other's temp file."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    path = str(tmp_path / "data.json")
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(lambda i: atomic_write_json(path, {"i": i}), range(50)))
+
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+
+    assert isinstance(data["i"], int)
+    assert not list(tmp_path.glob("*.tmp"))
+
+
 # ---------------------------------------------------------------------------
 # SeenWriter: in-memory dedup with debounced disk flush.
 # ---------------------------------------------------------------------------
