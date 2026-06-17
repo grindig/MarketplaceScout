@@ -12,7 +12,6 @@ from functools import lru_cache
 from typing import Optional
 
 import requests
-from bs4 import BeautifulSoup, SoupStrainer
 
 from i18n import t
 
@@ -29,9 +28,6 @@ HEADERS = {
 # (asyncio.to_thread), and requests.Session is not thread-safe. Sessions still
 # reuse TCP/TLS connections across the periodic scans of the same thread.
 _thread_local = threading.local()
-
-# Only the __NEXT_DATA__ script tag is needed; skip parsing the rest of the page.
-_NEXT_DATA_ONLY = SoupStrainer("script", id="__NEXT_DATA__")
 
 # Fast path: the __NEXT_DATA__ payload is a single self-contained JSON <script>
 # (Next.js escapes any "<" inside it), so a regex slice avoids running the whole
@@ -106,7 +102,12 @@ def parse_listings(html: str) -> list[dict]:
         raw = match.group(1)
     else:
         # Regex missed (markup changed) — let bs4 locate the tag instead.
-        soup = BeautifulSoup(html, "html.parser", parse_only=_NEXT_DATA_ONLY)
+        # Import lazily so the normal regex path doesn't pay BeautifulSoup's
+        # startup memory cost on every bot run.
+        from bs4 import BeautifulSoup, SoupStrainer
+
+        only_next_data = SoupStrainer("script", id="__NEXT_DATA__")
+        soup = BeautifulSoup(html, "html.parser", parse_only=only_next_data)
         script_tag = soup.find("script", id="__NEXT_DATA__")
         if script_tag is None:
             return []
