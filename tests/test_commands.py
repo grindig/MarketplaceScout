@@ -119,6 +119,20 @@ def test_archive_window_to_thread_deletes_embedless_without_posting():
     assert thread.sent == []
 
 
+def test_archive_reply_no_messages():
+    """Zero archived messages returns the no_messages string, not '0 archived'."""
+    from i18n import t
+    from commands import _archive_reply
+    assert _archive_reply(0) == t("command.archive.reply.no_messages")
+
+
+def test_archive_reply_with_count():
+    """One or more archived messages returns the archived string with the count."""
+    from i18n import t
+    from commands import _archive_reply
+    assert _archive_reply(3) == t("command.archive.reply.archived", n=3)
+
+
 class TestCommandsGerman:
     """Drive all /clear and /archive user-facing strings through German.
 
