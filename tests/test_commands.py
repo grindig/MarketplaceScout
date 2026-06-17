@@ -133,6 +133,26 @@ def test_archive_reply_with_count():
     assert _archive_reply(3) == t("command.archive.reply.archived", n=3)
 
 
+def test_archive_log_translation_formats_without_missing_placeholder():
+    """The archived_log string must format with only the kwargs commands.py passes.
+
+    Regression: the string used to carry an extra {m} placeholder that
+    commands.py never supplied, so t() raised KeyError: 'm' after the archive
+    work was already done — the command looked broken after destructive work.
+    """
+    from i18n import t
+
+    msg = t(
+        "command.archive.reply.archived_log",
+        channel="deals",
+        n=2,
+        label="1h",
+    )
+
+    assert "2" in msg
+    assert "1h" in msg
+
+
 class TestCommandsGerman:
     """Drive all /clear and /archive user-facing strings through German.
 
@@ -194,3 +214,17 @@ class TestCommandsGerman:
     def test_archive_reply_no_messages_german(self):
         from i18n import t
         assert t("command.archive.reply.no_messages") == "Keine Bot-Nachrichten im Zeitfenster gefunden."
+
+    def test_archive_log_translation_formats_in_german(self):
+        """The German archived_log string must format without the removed {m}."""
+        from i18n import t
+
+        msg = t(
+            "command.archive.reply.archived_log",
+            channel="deals",
+            n=2,
+            label="1h",
+        )
+
+        assert "2" in msg
+        assert "1h" in msg
