@@ -26,6 +26,38 @@ CONFIG_PATH = os.path.join(BOT_DIR, "json", "config.json")
 KEYWORDS_PATH = os.path.join(BOT_DIR, "json", "keywords.json")
 
 
+async def flush_seen_writer(client) -> None:
+    """Flush the SeenWriter attached to ``client``, if any.
+
+    Extracted so the shutdown path is unit-testable without a real Discord
+    client. Safe to call when no writer is attached (no-op) and safe to call
+    more than once — ``SeenWriter.stop()`` is idempotent.
+    """
+    writer = getattr(client, "_seen_writer", None)
+    if writer is not None:
+        await writer.stop()
+
+
+class MarketplaceScoutClient(discord.Client):
+    """discord.Client subclass that flushes the SeenWriter on close.
+
+    discord.py 2.x does NOT dispatch an ``on_close`` event, so the previous
+    ``on_close`` handler was dead code: a Ctrl+C or service stop ran
+    ``Client.run()``'s internal ``async with self`` (which calls
+    ``close()``) and returned without ever flushing pending seen IDs. By
+    overriding ``close()`` the flush runs as part of the real shutdown path,
+    before the HTTP/gateway clients are torn down. ``run()``'s logging
+    setup and KeyboardInterrupt handling are preserved unchanged.
+    """
+
+    async def close(self) -> None:
+        try:
+            await flush_seen_writer(self)
+        except Exception as exc:
+            print(f"{BOLD}{YELLOW}[{t('warn.banner_prefix')}]{RESET} " + t("storage.seen_flush_failed", exc=exc))
+        await super().close()
+
+
 def load_config() -> dict:
     if not os.path.exists(CONFIG_PATH):
         print(
@@ -284,15 +316,10 @@ async def midnight_restart(client):
         print(f"{DARK_GRAY}[{YELLOW}{t('scheduler.banner_prefix')}{DARK_GRAY}]{RESET} {LIGHT_GRAY}" + t("scheduler.next_restart", datetime=next_midnight.strftime('%d.%m.%Y %H:%M')) + f"{RESET}")
         await asyncio.sleep(seconds_until_midnight)
         # os.execv replaces the process image immediately and never returns, so
-        # it bypasses on_close. Flush the SeenWriter first — otherwise every
+        # it bypasses close(). Flush the SeenWriter first — otherwise every
         # nightly restart loses up to DEFAULT_SEEN_FLUSH_SECONDS of newly-seen
         # IDs and re-notifies (re-posts) those listings after the restart.
-        writer = getattr(client, "_seen_writer", None)
-        if writer is not None:
-            try:
-                await writer.stop()
-            except Exception as exc:
-                print(f"{BOLD}{YELLOW}[{t('warn.banner_prefix')}]{RESET} " + t("storage.seen_flush_failed", exc=exc))
+        await flush_seen_writer(client)
         restart()
 
 
@@ -306,7 +333,7 @@ def main():
     # max_messages=None disables discord.py's default 1000-message RAM cache:
     # the bot drives everything from raw reaction events + channel.fetch_message,
     # so the cache is never read — only memory.
-    client = discord.Client(intents=intents, max_messages=None)
+    client = MarketplaceScoutClient(intents=intents, max_messages=None)
     tree = discord.app_commands.CommandTree(client)
     # Register slash commands against the client.
     register_commands(client, tree)
@@ -332,13 +359,14 @@ def main():
         # SeenWriter: in-memory dedup with debounced disk flush. Loaded from
         # disk at construction, so the in-memory set is already populated
         # before any channel loop runs. The flush loop is started here and
-        # stopped in on_close (graceful shutdown) so a SIGINT never loses
-        # more than DEFAULT_SEEN_FLUSH_SECONDS of newly-seen IDs.
+        # stopped in MarketplaceScoutClient.close() (graceful shutdown) so a
+        # SIGINT never loses more than DEFAULT_SEEN_FLUSH_SECONDS of newly-
+        # seen IDs.
         seen_writer = SeenWriter(
             ttl_days=config.get("seen_ttl_days", DEFAULT_SEEN_TTL_DAYS),
         )
         seen_writer.start()
-        # Attach the writer to the client so on_close can find and stop it.
+        # Attach the writer to the client so close() can find and stop it.
         client._seen_writer = seen_writer  # type: ignore[attr-defined]
 
         stats_channel_id = config.get("stats_channel_id")
@@ -370,16 +398,6 @@ def main():
         asyncio.create_task(auto_archive_loop(client, archive_channel_ids, archive_interval))
 
     @client.event
-    async def on_close() -> None:
-        # Graceful shutdown: flush any pending seen-ID writes to disk so a
-        # clean stop doesn't lose IDs that haven't hit the debounce timer yet.
-        # The KeyError guard handles a close that races with a failed on_ready
-        # (e.g. commands_sync_failed before the writer was attached).
-        writer = getattr(client, "_seen_writer", None)
-        if writer is not None:
-            await writer.stop()
-
-    @client.event
     async def on_raw_reaction_add(payload: discord.RawReactionActionEvent) -> None:
         if str(payload.channel_id) == config.get("stats_channel_id", ""):
             return
@@ -394,7 +412,8 @@ def main():
     try:
         client.run(bot_token)
     except KeyboardInterrupt:
-        # on_close has already flushed the SeenWriter; nothing else to do.
+        # close() (called by run()'s internal `async with self`) has already
+        # flushed the SeenWriter; nothing else to do.
         print(f"\n{CYAN}[{t('stop.banner_prefix')}]{RESET} " + t("stop.scanner_stopped"))
         sys.exit(0)
 
