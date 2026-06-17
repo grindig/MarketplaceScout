@@ -8,7 +8,7 @@ Built for one job: catch the underpriced and the broken-but-fixable **first**.
 
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![discord.py](https://img.shields.io/badge/discord.py-2.x-5865F2)
-![tests](https://img.shields.io/badge/tests-127%20passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-138%20passing-brightgreen)
 ![made in](https://img.shields.io/badge/made%20for-🇦🇹%20willhaben-red)
 
 ---
@@ -72,11 +72,20 @@ willhaben.at ──► scanner ──► keyword/price filter ──► dedup (s
 
 ### 2. Install
 
+Clone the repo first:
+
 ```bash
 git clone https://github.com/grindig/MarketplaceScout.git
 cd MarketplaceScout
-pip install -r requirements.txt
 ```
+
+The recommended production path is **Docker Compose**. It gives you a pinned
+Python runtime, automatic container restarts, persistent state files, graceful
+shutdowns, and bounded Docker logs without installing Python packages on the
+host.
+
+If you prefer a local Python process for development, the classic
+`pip install -r requirements.txt && python main.py` flow still works.
 
 ### 3. Drop in your token
 
@@ -127,9 +136,58 @@ Copy `json/config.example.json` → `json/config.json` and fill in your channel 
 
 > 💡 Keywords live in `json/keywords.json`. A listing matches if its title contains **at least one** keyword (case-insensitive, boundary-aware). The `gpu_models` list doubles as the price-tracking key — a title with `RTX 3080 Ti` records under that model (longest match wins).
 
-### 5. Go
+### 5. Run with Docker Compose
+
+Build and start the bot in the background:
 
 ```bash
+docker compose up -d --build
+```
+
+Watch logs:
+
+```bash
+docker compose logs -f marketplacescout
+```
+
+Stop it cleanly:
+
+```bash
+docker compose down
+```
+
+The Compose file bind-mounts `./json` into the container, so your
+`config.json`, `seen.json`, `prices.json`, `stats_state.json`, and custom
+`keywords.json` stay on the host and survive rebuilds/recreates. The container
+uses `SIGINT` on stop so the bot follows its normal graceful shutdown path and
+flushes pending seen IDs.
+
+On Linux hosts with a non-`1000:1000` user, set `MARKETPLACESCOUT_UID` and
+`MARKETPLACESCOUT_GID` in `.env` to the output of `id -u` and `id -g` so the
+container can write to the bind-mounted `json/` directory.
+
+### 6. Update a Docker deployment
+
+For source-based deployments:
+
+```bash
+git pull
+docker compose up -d --build
+```
+
+That rebuilds the image from the current checkout and recreates only the bot
+container. Your `.env` and `json/` runtime state remain untouched.
+
+Before larger upgrades, back up local state:
+
+```bash
+tar -czf marketplacescout-state-$(date +%F).tar.gz .env json/config.json json/seen.json json/prices.json json/stats_state.json
+```
+
+### 7. Run without Docker
+
+```bash
+pip install -r requirements.txt
 python main.py
 ```
 
@@ -200,7 +258,7 @@ pip install pytest
 python -m pytest tests/
 ```
 
-127 tests covering parsing, the boundary-aware matcher, backfill pagination, dedup, atomic writes, the in-memory seen-ID writer, the price tracker, and the i18n layer.
+138 tests covering parsing, the boundary-aware matcher, backfill pagination, dedup, atomic writes, the in-memory seen-ID writer, the price tracker, scanner fast-path import hygiene, and the i18n layer.
 
 ---
 
