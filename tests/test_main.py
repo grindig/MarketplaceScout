@@ -332,3 +332,26 @@ def test_load_config_rejects_unknown_language(tmp_path, monkeypatch, capsys):
     with pytest.raises(SystemExit):
         main.load_config()
     assert "klingon" in capsys.readouterr().out
+
+
+def test_flush_seen_writer_stops_attached_writer(tmp_path):
+    """flush_seen_writer persists pending IDs from the writer attached to client."""
+    from storage import SeenWriter
+
+    path = tmp_path / "seen.json"
+    writer = SeenWriter(path=str(path))
+    writer.add("new-id")
+
+    client = type("Client", (), {})()
+    client._seen_writer = writer
+
+    asyncio.run(main.flush_seen_writer(client))
+
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert "new-id" in data
+
+
+def test_flush_seen_writer_no_writer_is_noop():
+    """flush_seen_writer on a client with no attached writer is a safe no-op."""
+    client = type("Client", (), {})()
+    asyncio.run(main.flush_seen_writer(client))
