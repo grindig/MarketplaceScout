@@ -3,6 +3,7 @@
 import asyncio
 import json
 import os
+import tempfile
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -44,28 +45,43 @@ def _cutoff(ttl_days: int) -> datetime:
 def atomic_write_json(path: str, data) -> None:
     """Write ``data`` (as JSON) to ``path`` atomically.
 
-    Writes to ``path + ".tmp"`` first, then ``os.replace``s onto the target.
-    The ``os.replace`` is retried on ``PermissionError`` (Windows race after
-    a recent replace of the same target) with exponential backoff.
-    """
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+    Writes to a unique temp file (via ``tempfile.mkstemp``) in the same
+    directory first, then ``os.replace``s onto the target. Same directory
+    matters because ``os.replace`` is only atomic within one filesystem.
 
-    delay = _ATOMIC_RETRY_INITIAL_SLEEP_S
-    for attempt in range(_ATOMIC_RETRY_ATTEMPTS):
-        try:
-            os.replace(tmp, path)
-            return
-        except PermissionError:
-            if attempt == _ATOMIC_RETRY_ATTEMPTS - 1:
-                # Final attempt: clean up the tmp so we don't leak it, then
-                # re-raise so the caller knows the write failed.
-                if os.path.exists(tmp):
-                    os.unlink(tmp)
-                raise
-            time.sleep(delay)
-            delay *= 2
+    Using a *unique* temp file per call avoids collisions when several
+    writers target the same path concurrently — the previous fixed
+    ``path + ".tmp"`` name let two concurrent writes clobber each other's
+    temp file. The ``os.replace`` is retried on ``PermissionError``
+    (Windows race after a recent replace of the same target) with
+    exponential backoff.
+    """
+    directory = os.path.dirname(os.path.abspath(path)) or "."
+    fd, tmp = tempfile.mkstemp(
+        prefix=os.path.basename(path) + ".",
+        suffix=".tmp",
+        dir=directory,
+        text=True,
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+
+        delay = _ATOMIC_RETRY_INITIAL_SLEEP_S
+        for attempt in range(_ATOMIC_RETRY_ATTEMPTS):
+            try:
+                os.replace(tmp, path)
+                return
+            except PermissionError:
+                if attempt == _ATOMIC_RETRY_ATTEMPTS - 1:
+                    raise
+                time.sleep(delay)
+                delay *= 2
+    finally:
+        # On success os.replace moved tmp away; on a fatal error it's still
+        # there. Tolerate both.
+        if os.path.exists(tmp):
+            os.unlink(tmp)
 
 
 def load_seen(path: str = SEEN_PATH, ttl_days: int = DEFAULT_SEEN_TTL_DAYS) -> set[str]:
