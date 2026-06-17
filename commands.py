@@ -55,6 +55,13 @@ def _window_label(days: int, hours: int, minutes: int) -> str:
     return " ".join(parts)
 
 
+def _archive_reply(archived: int) -> str:
+    """Return the user-facing reply for /archive based on the count."""
+    if archived == 0:
+        return t("command.archive.reply.no_messages")
+    return t("command.archive.reply.archived", n=archived)
+
+
 def register_commands(client: discord.Client, tree: app_commands.CommandTree) -> None:
     @tree.command(
         name=t("command.clear.name"),
@@ -145,4 +152,4 @@ def register_commands(client: discord.Client, tree: app_commands.CommandTree) ->
             f"{MAGENTA}[{t('command.archive.banner_prefix')}]{RESET} "
             f"{t('command.archive.reply.archived_log', channel=channel.name, n=archived, label=label)}"
         )
-        await interaction.followup.send(t("command.archive.reply.archived", n=archived), ephemeral=True)
+        await interaction.followup.send(_archive_reply(archived), ephemeral=True)
