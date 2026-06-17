@@ -1,0 +1,35 @@
+# Git / local agent state
+.git
+.gitignore
+.hermes
+.claude
+
+# Secrets and runtime state must stay on the host and be mounted at runtime.
+.env
+json/config.json
+json/seen.json
+json/prices.json
+json/stats_state.json
+json/*.tmp
+
+# Python caches / virtualenvs
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Test/docs/dev-only files are not needed in the runtime image.
+tests/
+docs/
+*.md
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Scratch / OS metadata
+temp/
+.DS_Store
+Thumbs.db
