@@ -114,7 +114,7 @@ def test_scan_loop_skips_listing_already_seen(tmp_path, monkeypatch):
 
     async def drive():
         task = asyncio.create_task(
-            main.scan_loop(_FakeClient(_FakeChannel()), config, channel_cfg, seen_writer)
+            main.scan_loop(_FakeClient(_FakeChannel()), config, channel_cfg, seen_writer, asyncio.Lock())
         )
         # let it run one scan, then it parks on the interval sleep; cancel it
         for _ in range(20):
@@ -163,7 +163,7 @@ def test_scan_loop_sends_listing_when_historical_average_is_zero(tmp_path, monke
 
     async def drive():
         task = asyncio.create_task(
-            main.scan_loop(_FakeClient(_FakeChannel()), config, channel_cfg, seen_writer)
+            main.scan_loop(_FakeClient(_FakeChannel()), config, channel_cfg, seen_writer, asyncio.Lock())
         )
         for _ in range(20):
             await asyncio.sleep(0)
@@ -179,6 +179,75 @@ def test_scan_loop_sends_listing_when_historical_average_is_zero(tmp_path, monke
     assert "price_stats" not in sends[0]
     assert recorded == [("RTX 3060", 100.0)]
     assert seen_writer.seen == {"42"}
+
+
+def test_scan_loop_dedup_lock_prevents_cross_channel_duplicate(tmp_path, monkeypatch):
+    """Two channels scanning concurrently must not both post the same listing.
+
+    Without the dedup_lock, the re-check + await send + mark sequence has a
+    window between the re-check and the mark where a second channel's loop can
+    pass the same re-check and also send — producing a duplicate notification.
+    The lock serializes check+send+mark so only one channel delivers it.
+    """
+    listing = {"id": "dup", "title": "RTX 3080", "price": 100.0, "url": "", "location": ""}
+
+    monkeypatch.setattr(main, "scan_once", lambda cfg: [listing])
+    # filter_new passes the listing through (seen set is empty at scan time).
+    monkeypatch.setattr(main, "filter_new", lambda listings, seen: listings)
+
+    sends: list[str] = []
+
+    async def fake_send(channel, lst, mention=True):
+        sends.append(channel.name)
+        # Yield on the first send so the second channel's loop reaches the
+        # lock and blocks until the first channel has marked the ID seen.
+        await asyncio.sleep(0.02)
+        return True
+
+    monkeypatch.setattr(main, "send_notification", fake_send)
+
+    seen_writer = SeenWriter(path=str(tmp_path / "seen.json"))
+    config = {"keywords": ["RTX"], "scan_interval_seconds": 3600}
+    channel_cfg_a = {"channel_id": "1", "max_price": None, "search_urls": ["u1"]}
+    channel_cfg_b = {"channel_id": "2", "max_price": None, "search_urls": ["u1"]}
+
+    class _NamedChannel:
+        def __init__(self, name):
+            self.name = name
+
+    class _MultiChannelClient:
+        def __init__(self):
+            self._channels = {"1": _NamedChannel("a"), "2": _NamedChannel("b")}
+
+        async def wait_until_ready(self):
+            return
+
+        def get_channel(self, _id):
+            return self._channels.get(str(_id))
+
+    async def drive():
+        client = _MultiChannelClient()
+        lock = asyncio.Lock()
+        task_a = asyncio.create_task(
+            main.scan_loop(client, config, channel_cfg_a, seen_writer, lock)
+        )
+        task_b = asyncio.create_task(
+            main.scan_loop(client, config, channel_cfg_b, seen_writer, lock)
+        )
+        # Sleep long enough for both scan loops to complete one full cycle:
+        # scan_once (to_thread) → filter_new → print → lock+send+mark.
+        # The fake_send yields for 0.02 s, so 0.2 s is ample headroom.
+        await asyncio.sleep(0.2)
+        for t in (task_a, task_b):
+            t.cancel()
+            try:
+                await t
+            except asyncio.CancelledError:
+                pass
+
+    asyncio.run(drive())
+
+    assert len(sends) == 1  # only one channel sent the listing
 
 
 def _make_send_stub(result: bool, calls: list):
