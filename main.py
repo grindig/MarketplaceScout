@@ -185,7 +185,7 @@ async def backfill_channel(
     print(f"{DARK_GRAY}[{YELLOW}{t('backfill.banner_prefix')}{DARK_GRAY}]{RESET} " + t("backfill.done", channel=channel.name))
 
 
-async def scan_loop(client: discord.Client, config: dict, channel_cfg: dict, seen_writer: SeenWriter) -> None:
+async def scan_loop(client: discord.Client, config: dict, channel_cfg: dict, seen_writer: SeenWriter, dedup_lock: asyncio.Lock) -> None:
     """Background task: scan Willhaben for one channel and notify on new listings."""
     await client.wait_until_ready()
 
@@ -227,13 +227,6 @@ async def scan_loop(client: discord.Client, config: dict, channel_cfg: dict, see
                 await SPINNER.pause()
                 print(f"{BOLD}{GREEN}" + t("scan.new_hits", channel=channel.name, n=scan_count, m=len(new_listings)) + f"{RESET}")
                 for listing in new_listings:
-                    # All channels share one SeenWriter. new_listings was
-                    # computed before the awaits below, so another channel's
-                    # loop may have sent the same listing in the meantime —
-                    # re-check here so a listing shared across channels' URLs
-                    # isn't posted twice.
-                    if listing["id"] in seen_ids:
-                        continue
                     price_str = f"{listing['price']:.2f} EUR" if listing['price'] is not None else "N/A"
                     print(f"  {YELLOW}->{RESET} {listing['title']} | {price_str} | {listing['location']}")
 
@@ -250,13 +243,24 @@ async def scan_loop(client: discord.Client, config: dict, channel_cfg: dict, see
                                     "pct": pct,
                                 }
 
-                    # mark seen + record price only after a successful send, so a
-                    # transient Discord failure retries on the next scan without
-                    # double-recording the price. The SeenWriter's debounce timer
-                    # handles the disk write; no per-cycle save_seen needed.
-                    if await _send_and_mark(seen_writer, channel, listing):
-                        if model:
-                            record_price(model, listing["price"])
+                    # All channels share one SeenWriter and one dedup_lock.
+                    # new_listings was computed before the awaits below, so
+                    # another channel's loop may have sent the same listing
+                    # in the meantime. The lock serializes check+send+mark
+                    # across channels so a listing shared across channels'
+                    # URLs is posted to at most one channel.
+                    async with dedup_lock:
+                        if listing["id"] in seen_ids:
+                            continue
+                        sent = await _send_and_mark(seen_writer, channel, listing)
+
+                    # Record price only after a successful send, so a transient
+                    # Discord failure retries on the next scan without
+                    # double-recording the price. Offloaded to a worker thread
+                    # because atomic_write_json can sleep up to ~2.5 s on
+                    # Windows's replace-retry tail.
+                    if sent and model:
+                        await asyncio.to_thread(record_price, model, listing["price"])
 
         except Exception as e:
             await SPINNER.pause()
@@ -271,7 +275,7 @@ def restart():
     os.execv(sys.executable, [sys.executable] + sys.argv)
 
 
-async def midnight_restart():
+async def midnight_restart(client):
     """Restart the bot at midnight every day."""
     while True:
         now = datetime.now()
@@ -279,6 +283,16 @@ async def midnight_restart():
         seconds_until_midnight = (next_midnight - now).total_seconds()
         print(f"{DARK_GRAY}[{YELLOW}{t('scheduler.banner_prefix')}{DARK_GRAY}]{RESET} {LIGHT_GRAY}" + t("scheduler.next_restart", datetime=next_midnight.strftime('%d.%m.%Y %H:%M')) + f"{RESET}")
         await asyncio.sleep(seconds_until_midnight)
+        # os.execv replaces the process image immediately and never returns, so
+        # it bypasses on_close. Flush the SeenWriter first — otherwise every
+        # nightly restart loses up to DEFAULT_SEEN_FLUSH_SECONDS of newly-seen
+        # IDs and re-notifies (re-posts) those listings after the restart.
+        writer = getattr(client, "_seen_writer", None)
+        if writer is not None:
+            try:
+                await writer.stop()
+            except Exception as exc:
+                print(f"{BOLD}{YELLOW}[{t('warn.banner_prefix')}]{RESET} " + t("storage.seen_flush_failed", exc=exc))
         restart()
 
 
@@ -329,7 +343,7 @@ def main():
 
         stats_channel_id = config.get("stats_channel_id")
         stats_msg = await stats_init(client, stats_channel_id)
-        asyncio.create_task(midnight_restart())
+        asyncio.create_task(midnight_restart(client))
 
         backfill_days = config.get("backfill_days", 0)
         if backfill_days > 0:
@@ -341,8 +355,13 @@ def main():
             except Exception as exc:
                 print(f"{BOLD}{YELLOW}[{t('warn.banner_prefix')}]{RESET} " + t("backfill.reset_failed", exc=exc))
 
+        # One lock shared across all scan loops: serializes the check+send+mark
+        # critical section so a listing that appears in multiple channels' URL
+        # sets is posted to at most one channel per scan cycle.
+        dedup_lock = asyncio.Lock()
+
         for channel_cfg in config["channels"]:
-            asyncio.create_task(scan_loop(client, config, channel_cfg, seen_writer))
+            asyncio.create_task(scan_loop(client, config, channel_cfg, seen_writer, dedup_lock))
         if stats_msg:
             asyncio.create_task(stats_loop(client, stats_channel_id, stats_msg))
 
