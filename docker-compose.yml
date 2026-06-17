@@ -1,0 +1,24 @@
+name: marketplacescout
+
+services:
+  marketplacescout:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: marketplacescout:local
+    container_name: marketplacescout
+    user: "${MARKETPLACESCOUT_UID:-1000}:${MARKETPLACESCOUT_GID:-1000}"
+    restart: unless-stopped
+    init: true
+    stop_signal: SIGINT
+    stop_grace_period: 30s
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - ./json:/app/json
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
