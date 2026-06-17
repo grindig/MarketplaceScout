@@ -231,11 +231,26 @@ class SeenWriter:
         await self.flush_now()
 
     async def flush_now(self) -> None:
-        """Force a synchronous write if anything is dirty. Cheap no-op otherwise."""
+        """Force a write if anything is dirty. Cheap no-op otherwise.
+
+        The disk write (read-merge-write of the whole file, plus the
+        PermissionError-retry tail of ``atomic_write_json`` that can sleep
+        up to ~2.5 s on Windows) runs in a worker thread so it never blocks
+        the event loop — the very stall this class exists to avoid. The set
+        is snapshotted under the GIL first so the worker thread iterates a
+        private copy and can never race a concurrent ``add``.
+        """
         if not self._dirty:
             return
-        save_seen(self._seen, self._path, ttl_days=self._ttl_days)
+        snapshot = set(self._seen)  # atomic copy; decouples the slow write from add()
         self._dirty = False
+        try:
+            await asyncio.to_thread(save_seen, snapshot, self._path, self._ttl_days)
+        except Exception:
+            # Write failed — keep the dirty flag set so the next tick retries
+            # instead of dropping the IDs on the floor.
+            self._dirty = True
+            raise
 
     async def _run(self, stop: asyncio.Event) -> None:
         while not stop.is_set():
