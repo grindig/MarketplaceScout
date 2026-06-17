@@ -1,6 +1,8 @@
 """Tests for the willhaben listing scanner."""
 
 import os
+import subprocess
+import sys
 import threading
 from datetime import datetime, timedelta, timezone
 
@@ -82,6 +84,37 @@ def test_parse_listings_no_image_url_when_missing():
     assert result == [{"id": "1", "title": "x", "price": None, "url": "",
                        "location": "", "published": None, "paylivery": False,
                        "image_url": ""}]
+
+
+def test_scanner_fast_path_does_not_import_bs4():
+    """The normal __NEXT_DATA__ regex path must not pay BeautifulSoup's import cost."""
+    code = r'''
+import builtins
+from pathlib import Path
+
+real_import = builtins.__import__
+
+def guarded_import(name, *args, **kwargs):
+    if name == "bs4" or name.startswith("bs4."):
+        raise AssertionError("bs4 imported on scanner fast path")
+    return real_import(name, *args, **kwargs)
+
+builtins.__import__ = guarded_import
+
+import scanner
+
+html = Path("tests/fixtures/sample_response.html").read_text(encoding="utf-8")
+assert scanner.parse_listings(html)
+'''
+    repo = os.path.dirname(os.path.dirname(__file__))
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=repo,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
 
 
 # ---------------------------------------------------------------------------
