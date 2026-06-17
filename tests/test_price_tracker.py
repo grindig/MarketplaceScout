@@ -84,3 +84,23 @@ def test_record_price_caps_history(tmp_path):
     assert len(history) == MAX_HISTORY
     assert history[-1] == float(MAX_HISTORY + 4)  # newest kept
     assert history[0] == 5.0  # oldest trimmed
+
+
+def test_record_price_concurrent_writes_preserve_entries(tmp_path):
+    """Concurrent record_price calls (one per channel scan thread) must not
+    lose entries to the read/mutate/write race on the shared _cache."""
+    from concurrent.futures import ThreadPoolExecutor
+    import price_tracker
+
+    path = str(tmp_path / "prices.json")
+    price_tracker._cache.clear()
+
+    values = [float(i) for i in range(50)]
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(lambda p: record_price("RTX 3080", p, path), values))
+
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+
+    assert sorted(data["RTX 3080"]) == values
