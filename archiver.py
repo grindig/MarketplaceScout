@@ -10,6 +10,11 @@ from i18n import t
 
 X_EMOJI = "\U0000274c"  # ❌
 
+# Bound each scheduled pass so a mature channel with years of stale messages
+# doesn't get re-walked every 30 minutes. The loop asks Discord for the newest
+# stale messages and then processes only that bounded batch oldest-first.
+AUTO_ARCHIVE_HISTORY_LIMIT = 500
+
 
 async def find_or_create_archive_thread(channel: discord.TextChannel) -> discord.Thread:
     """Return the 'archive' thread in channel, creating it if necessary."""
@@ -83,7 +88,15 @@ async def auto_archive_loop(
                 continue
             archive_thread = None  # created lazily on the first stale message
             try:
-                async for msg in channel.history(limit=None, before=cutoff, oldest_first=True):
+                stale_batch = [
+                    msg
+                    async for msg in channel.history(
+                        limit=AUTO_ARCHIVE_HISTORY_LIMIT,
+                        before=cutoff,
+                        oldest_first=False,
+                    )
+                ]
+                for msg in reversed(stale_batch):
                     if msg.author.id != client.user.id:
                         continue
                     if archive_thread is None:
