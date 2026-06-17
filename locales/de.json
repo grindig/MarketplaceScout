@@ -23,7 +23,7 @@
   "command.archive.reply.no_messages": "Keine Bot-Nachrichten im Zeitfenster gefunden.",
   "command.archive.reply.thread_error": "Archive-Thread konnte nicht geöffnet werden: {exc}",
   "command.archive.reply.archived": "{n} Nachrichten archiviert.",
-  "command.archive.reply.archived_log": "#{channel}: {n}/{m} archiviert ({label}).",
+  "command.archive.reply.archived_log": "#{channel}: {n} archiviert ({label}).",
   "error.token_missing": "DISCORD_BOT_TOKEN Umgebungsvariable nicht gesetzt (siehe .env.example).",
   "error.config_missing": "{path} fehlt.\nKopiere json/config.example.json nach json/config.json und trage deine Channel-IDs ein.",
   "error.keywords_missing": "{path} fehlt (keywords.json mit 'general' und 'gpu_models' Listen).",
