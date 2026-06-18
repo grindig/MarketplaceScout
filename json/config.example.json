@@ -3,6 +3,8 @@
   "seen_ttl_days": 52,
   "language": "en",
   "backfill_days": 0,
+  "enable_clear": 1,
+  "enable_archive": 1,
   "auto_archive_interval_minutes": 30,
   "stats_channel_id": "000000000000000000",
   "channels": [
