@@ -335,8 +335,10 @@ def main():
     # so the cache is never read — only memory.
     client = MarketplaceScoutClient(intents=intents, max_messages=None)
     tree = discord.app_commands.CommandTree(client)
-    # Register slash commands against the client.
-    register_commands(client, tree)
+    # Slash commands are individually opt-in via config. When a flag is 0 the
+    # command is not registered, and tree.sync() removes it from Discord on
+    # next boot.
+    register_commands(client, tree, config)
 
     started = False
 
