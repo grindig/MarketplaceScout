@@ -9,7 +9,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Run as UID/GID 1000 so bind-mounted json/ state stays writable for the
+# Run as UID/GID 1000 so bind-mounted cfg/ state stays writable for the
 # common Linux desktop/server user. Compose can override the numeric user if a
 # deployment needs a different host UID/GID.
 RUN groupadd --gid 1000 app \
@@ -26,7 +26,7 @@ RUN python -m pip install --upgrade pip \
     && python -m pip install -r requirements.txt
 
 COPY . ./
-RUN mkdir -p /app/json \
+RUN mkdir -p /app/cfg \
     && chown -R app:app /app
 
 USER app:app

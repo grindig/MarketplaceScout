@@ -16,7 +16,7 @@ services:
       - path: .env
         required: false
     volumes:
-      - ./json:/app/json
+      - ./cfg:/app/cfg
     logging:
       driver: json-file
       options:
