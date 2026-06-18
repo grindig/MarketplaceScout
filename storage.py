@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 
 from i18n import t
 
-SEEN_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "json", "seen.json")
+SEEN_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cfg", "seen.json")
 
 # On Windows, os.replace against a destination that was *just* replaced can
 # fail with WinError 5 (Access is denied) because the destination still has

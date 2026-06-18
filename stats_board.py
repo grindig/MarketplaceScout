@@ -13,7 +13,7 @@ from i18n import t
 from price_tracker import _load, PRICES_PATH
 from storage import atomic_write_json
 
-STATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "json", "stats_state.json")
+STATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cfg", "stats_state.json")
 _TAG = f"{DARK_GRAY}[{CYAN}STATS{DARK_GRAY}]{RESET}"
 
 _GENERATIONS = ["10xx", "20xx", "30xx", "40xx", "50xx"]

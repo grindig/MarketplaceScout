@@ -9,7 +9,7 @@ from typing import Optional
 from i18n import t
 from storage import atomic_write_json
 
-PRICES_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "json", "prices.json")
+PRICES_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cfg", "prices.json")
 
 _WHITESPACE = re.compile(r"\s+")
 

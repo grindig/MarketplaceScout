@@ -22,8 +22,8 @@ from stats_board import stats_init, stats_loop
 from storage import atomic_write_json, load_seen, SeenWriter, DEFAULT_SEEN_TTL_DAYS
 
 BOT_DIR = os.path.dirname(os.path.abspath(__file__))
-CONFIG_PATH = os.path.join(BOT_DIR, "json", "config.json")
-KEYWORDS_PATH = os.path.join(BOT_DIR, "json", "keywords.json")
+CONFIG_PATH = os.path.join(BOT_DIR, "cfg", "config.json")
+KEYWORDS_PATH = os.path.join(BOT_DIR, "cfg", "keywords.json")
 
 
 async def flush_seen_writer(client) -> None:
