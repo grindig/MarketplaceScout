@@ -25,7 +25,7 @@
   "command.archive.reply.archived": "{n} messages archived.",
   "command.archive.reply.archived_log": "#{channel}: {n} archived ({label}).",
   "error.token_missing": "DISCORD_BOT_TOKEN environment variable not set (see .env.example).",
-  "error.config_missing": "{path} is missing.\nCopy json/config.example.json to json/config.json and fill in your channel IDs.",
+  "error.config_missing": "{path} is missing.\nCopy cfg/config.example.json to cfg/config.json and fill in your channel IDs.",
   "error.keywords_missing": "{path} is missing (keywords.json with 'general' and 'gpu_models' lists).",
   "error.channel_not_found": "Channel {channel_id} not found.",
   "boot.scanner_started": "Scanner started: #{channel}",
