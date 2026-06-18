@@ -1,10 +1,10 @@
 # Secrets & local runtime state — never commit these
 .env
-json/config.json
-json/seen.json
-json/prices.json
-json/stats_state.json
-json/*.tmp
+cfg/config.json
+cfg/seen.json
+cfg/prices.json
+cfg/stats_state.json
+cfg/*.tmp
 
 # Caches / scratch
 __pycache__/
