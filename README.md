@@ -97,7 +97,7 @@ DISCORD_BOT_TOKEN=your-bot-token-here
 
 ### 4. Configure
 
-Copy `json/config.example.json` → `json/config.json` and fill in your channel IDs and search URLs:
+Copy `cfg/config.example.json` → `cfg/config.json` and fill in your channel IDs and search URLs:
 
 ```json
 {
@@ -134,7 +134,7 @@ Copy `json/config.example.json` → `json/config.json` and fill in your channel 
 | `channels[].show_price_stats` | Add the Ø-price comparison field to embeds |
 | `channels[].search_urls` | willhaben search URLs to poll — just build a search on the site and copy the URL |
 
-> 💡 Keywords live in `json/keywords.json`. A listing matches if its title contains **at least one** keyword (case-insensitive, boundary-aware). The `gpu_models` list doubles as the price-tracking key — a title with `RTX 3080 Ti` records under that model (longest match wins).
+> 💡 Keywords live in `cfg/keywords.json`. A listing matches if its title contains **at least one** keyword (case-insensitive, boundary-aware). The `gpu_models` list doubles as the price-tracking key — a title with `RTX 3080 Ti` records under that model (longest match wins).
 
 ### 5. Run with Docker Compose
 
@@ -164,7 +164,7 @@ flushes pending seen IDs.
 
 On Linux hosts with a non-`1000:1000` user, set `MARKETPLACESCOUT_UID` and
 `MARKETPLACESCOUT_GID` in `.env` to the output of `id -u` and `id -g` so the
-container can write to the bind-mounted `json/` directory.
+container can write to the bind-mounted `cfg/` directory.
 
 ### 6. Update a Docker deployment
 
@@ -176,12 +176,12 @@ docker compose up -d --build
 ```
 
 That rebuilds the image from the current checkout and recreates only the bot
-container. Your `.env` and `json/` runtime state remain untouched.
+container. Your `.env` and `cfg/` runtime state remain untouched.
 
 Before larger upgrades, back up local state:
 
 ```bash
-tar -czf marketplacescout-state-$(date +%F).tar.gz .env json/config.json json/seen.json json/prices.json json/stats_state.json
+tar -czf marketplacescout-state-$(date +%F).tar.gz .env cfg/config.json cfg/seen.json cfg/prices.json cfg/stats_state.json
 ```
 
 ### 7. Run without Docker
@@ -229,7 +229,7 @@ The bot also restarts itself nightly at midnight to stay fresh. To restart manua
 ## Languages
 
 The bot's console output, embed field names, and slash-command descriptions are
-fully translatable. Set `language` in `json/config.json` to one of the available
+fully translatable. Set `language` in `cfg/config.json` to one of the available
 codes (currently `en` and `de`) and restart the bot.
 
 Adding a new language is two steps:
@@ -240,7 +240,7 @@ Adding a new language is two steps:
 
 ## 💾 State files
 
-All runtime state lives in `json/` and is git-ignored:
+All runtime state lives in `cfg/` and is git-ignored:
 
 | File | Holds |
 |---|---|
