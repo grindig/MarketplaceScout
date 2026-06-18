@@ -186,7 +186,7 @@ class TestCommandsGerman:
         type(client)._connection._command_tree = None
 
         tree = discord.app_commands.CommandTree(client)
-        register_commands(client, tree)
+        register_commands(client, tree, {"enable_clear": 1, "enable_archive": 1})
         return tree
 
     def test_clear_description_german(self):
